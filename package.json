@@ -56,6 +56,7 @@
     "test": "vitest run",
     "smoke": "bash scripts/smoke.sh",
     "bundle-sanity": "bash scripts/bundle-sanity.sh",
-    "prepublishOnly": "yarn build && yarn typecheck && yarn test"
+    "prepublishOnly": "yarn build && yarn typecheck && yarn test",
+    "release": "yarn npm publish --access public"
   }
 }
