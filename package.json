@@ -36,9 +36,7 @@
   },
   "license": "MIT",
   "author": "Casual Theorics",
-  "dependencies": {
-    "@argdown/node": "^2.0.3"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@argdown/core": "^2.0.1",
     "@argdown/node": "^2.0.3",

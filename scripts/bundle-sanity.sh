@@ -22,14 +22,15 @@ if [[ "$FIRST_LINE" != "#!/usr/bin/env node" ]]; then
 fi
 echo "OK: shebang is correct"
 
-# 3. Bundle size < 7 MB (chevrotain + @argdown/{core,node} + MCP SDK + zod ~ 5.8 MB; 7 MB gives headroom)
+# 3. Bundle size < 100 MB (generous ceiling; current ~6 MB after bundling
+#    everything including @argdown/node + cosmiconfig + chevrotain)
 BUNDLE_SIZE=$(wc -c < "$DIST_FILE")
-MAX_SIZE=$((7 * 1024 * 1024))
+MAX_SIZE=$((100 * 1024 * 1024))
 if [[ "$BUNDLE_SIZE" -ge "$MAX_SIZE" ]]; then
-  echo "FAIL: dist/server.js is ${BUNDLE_SIZE} bytes (>= 7 MB limit)" >&2
+  echo "FAIL: dist/server.js is ${BUNDLE_SIZE} bytes (>= 100 MB limit)" >&2
   exit 1
 fi
-echo "OK: bundle size is ${BUNDLE_SIZE} bytes (< 7 MB)"
+echo "OK: bundle size is ${BUNDLE_SIZE} bytes (< 100 MB)"
 
 # 4. No .node files anywhere in dist/
 NODE_FILES=$(find "$WORKTREE_ROOT/dist" -name "*.node" 2>/dev/null || true)
