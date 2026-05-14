@@ -1,0 +1,174 @@
+{
+  "argdown_core_version": "^2.0.1",
+  "probe_input": "# Section\n\n[Premise A]: First premise.\n\n[Premise B]: Second premise.\n  + [Premise A]\n\n[Some target]: The target statement.\n\n<Argument>: The conclusion.\n  + [Premise A]\n  + [Premise B]\n  -> [Some target]\n",
+  "top_level_keys": [
+    "arguments",
+    "statements",
+    "relations",
+    "sections",
+    "tags"
+  ],
+  "key_samples": {
+    "arguments": {
+      "type": "Record<string, object>",
+      "sample": {
+        "Argument": {
+          "type": "argument",
+          "relations": [
+            {
+              "type": "relation",
+              "relationType": "support",
+              "from": "Premise A",
+              "fromType": "equivalence-class",
+              "to": "Argument",
+              "toType": "argument"
+            },
+            {
+              "type": "relation",
+              "relationType": "support",
+              "from": "Premise B",
+              "fromType": "equivalence-class",
+              "to": "Argument",
+              "toType": "argument"
+            },
+            {
+              "type": "relation",
+              "relationType": "attack",
+              "from": "Argument",
+              "fromType": "argument",
+              "to": "Some target",
+              "toType": "equivalence-class"
+            }
+          ],
+          "members": [
+            {
+              "type": "statement",
+              "role": "argument-description",
+              "text": "The conclusion.",
+              "startLine": 10,
+              "endLine": 13,
+              "startColumn": 1,
+              "endColumn": 19,
+              "isTopLevel": true,
+              "section": "s1",
+              "title": "Argument"
+            }
+          ],
+          "pcs": [],
+          "title": "Argument",
+          "section": "s1"
+        }
+      }
+    },
+    "statements": {
+      "type": "Record<string, object>",
+      "sample": {
+        "Premise A": {
+          "type": "equivalence-class",
+          "title": "Premise A",
+          "relations": [
+            {
+              "type": "relation",
+              "relationType": "support",
+              "from": "Premise A",
+              "fromType": "equivalence-class",
+              "to": "Premise B",
+              "toType": "equivalence-class"
+            },
+            {
+              "type": "relation",
+              "relationType": "support",
+              "from": "Premise A",
+              "fromType": "equivalence-class",
+              "to": "Argument",
+              "toType": "argument"
+            }
+          ],
+          "members": [
+            {
+              "type": "statement",
+              "role": "top-level-statement",
+              "isTopLevel": true,
+              "title": "Premise A",
+              "text": "First premise.",
+              "startLine": 3,
+              "startColumn": 1,
+              "endLine": 3,
+              "endColumn": 27,
+              "section": "s1"
+            },
+            {
+              "type": "statement",
+              "role": "relation-statement",
+              "title": "Premise A",
+              "isReference": true,
+              "startLine": 6,
+              "startColumn": 5,
+              "endLine": 6,
+              "endColumn": 15,
+              "section": "s1"
+            },
+            {
+              "type": "statement",
+              "role": "relation-statement",
+              "title": "Premise A",
+              "isReference": true,
+              "startLine": 11,
+              "startColumn": 5,
+              "endLine": 11,
+              "endColumn": 16,
+              "section": "s1"
+            }
+          ],
+          "section": "s1",
+          "isUsedAsTopLevelStatement": true,
+          "isUsedAsRelationStatement": true
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "sample": [
+        {
+          "type": "relation",
+          "relationType": "support",
+          "from": "Premise A",
+          "fromType": "equivalence-class",
+          "to": "Premise B",
+          "toType": "equivalence-class"
+        },
+        {
+          "type": "relation",
+          "relationType": "support",
+          "from": "Premise A",
+          "fromType": "equivalence-class",
+          "to": "Argument",
+          "toType": "argument"
+        }
+      ]
+    },
+    "sections": {
+      "type": "array",
+      "sample": [
+        {
+          "type": "section",
+          "id": "s1",
+          "level": 1,
+          "title": "Section",
+          "children": [],
+          "ranges": [],
+          "startLine": 1,
+          "startColumn": 1,
+          "endLine": 13,
+          "endColumn": 19
+        }
+      ]
+    },
+    "tags": {
+      "type": "Record<string, undefined>",
+      "sample": {}
+    }
+  },
+  "captured_at": "2026-05-14T06:48:55.547Z",
+  "captured_by": "scripts/schema-probe.mjs"
+}
