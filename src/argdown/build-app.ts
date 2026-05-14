@@ -70,7 +70,7 @@ export function buildApp(opts: {
 export function buildApp(
   opts: BuildAppOptions,
 ): ArgdownApplication | AsyncArgdownApplication {
-  const app: ArgdownApplication | AsyncArgdownApplication = opts.async
+  const app = opts.async
     ? new AsyncArgdownApplication()
     : new ArgdownApplication();
 
