@@ -1,0 +1,10 @@
+This is a plain text file that does not conform to Argdown syntax.
+It contains ordinary English sentences and some unicode: café, naïve, résumé.
+There are no statement definitions, argument headers, or relation markers here.
+The file uses a .txt extension deliberately to signal it is not Argdown.
+随机的中文字符 and some Greek: αβγδεζηθ
+More plain prose follows on this line without any special markup.
+No brackets denoting statements, no angle brackets for arguments.
+Just regular human-readable text arranged in lines.
+The quick brown fox jumps over the lazy dog.
+End of file.

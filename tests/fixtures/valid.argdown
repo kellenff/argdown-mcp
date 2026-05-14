@@ -1,0 +1,14 @@
+# Climate Change Arguments
+
+[Human Activity Causes Warming]: Human greenhouse gas emissions are the primary driver of observed global warming since the mid-20th century.
+
+[Scientific Consensus Exists]: The overwhelming majority of climate scientists agree that human activity is causing climate change.
+  + [Human Activity Causes Warming]
+
+[Action Is Required]: Given the evidence, immediate policy action to reduce emissions is necessary.
+  + [Human Activity Causes Warming]
+  + [Scientific Consensus Exists]
+
+<Argument from Evidence>: The empirical temperature record shows a clear correlation with industrialization.
+  + [Scientific Consensus Exists]
+  - [Action Is Required]

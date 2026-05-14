@@ -1,0 +1,9 @@
+@import "imports/imported.argdown"
+
+# Main Document
+
+[Main Claim]: The conclusion established in this document is well-supported by imported evidence.
+  + [Imported Support]
+
+[Additional Point]: This statement is defined locally in the main file and adds further context.
+  + [Main Claim]

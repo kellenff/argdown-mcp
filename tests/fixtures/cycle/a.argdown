@@ -1,0 +1,6 @@
+@import "b.argdown"
+
+# File A
+
+[A Claim]: This claim is defined in file A and references content from file B.
+  + [B Claim]
