@@ -1,5 +1,9 @@
 # Kernel orchestration artefacts (worktrees, reviews, etc.)
 .claude/
+.base-sha
+
+# Sibling plugin package — not part of this package
+argdown-plugin/
 
 # Source and config — not needed in the published package
 src/

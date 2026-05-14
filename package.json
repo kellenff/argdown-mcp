@@ -5,9 +5,7 @@
   "type": "module",
   "bin": "./dist/server.js",
   "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+    "dist/server.js"
   ],
   "engines": {
     "node": ">=24"
