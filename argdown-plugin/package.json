@@ -1,7 +1,7 @@
 {
   "name": "@casualtheorics/argdown-plugin",
-  "version": "0.1.0",
-  "description": "Claude Code plugin for Argdown reasoning — 6 skills + auto-registered MCP server",
+  "version": "0.2.0",
+  "description": "Claude Code plugin for Argdown reasoning — 7 skills (incl. Dung grounded extension) + auto-registered MCP server",
   "license": "MIT",
   "author": "Casual Theorics",
   "homepage": "https://github.com/kellenff/argdown-mcp",

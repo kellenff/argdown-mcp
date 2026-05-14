@@ -1,6 +1,6 @@
 # @casualtheorics/argdown-plugin
 
-Claude Code plugin for reasoning about Argdown. Auto-registers the [argdown-mcp](https://github.com/kellenff/argdown-mcp) server and ships six surgically-triggered skills for parse/validate, structural query, rebuttal, extraction, and summary work.
+Claude Code plugin for reasoning about Argdown. Auto-registers the [argdown-mcp](https://github.com/kellenff/argdown-mcp) server and ships seven surgically-triggered skills for parse/validate, structural query, rebuttal, extraction, summary, and Dung grounded-extension work.
 
 ## Install
 
@@ -36,7 +36,7 @@ BFS through the relation graph from a named claim or argument. Detects cycles. O
 
 > "rebut this argument" · "steelman a counter-argument to" · "how would someone disagree with"
 
-Generates a counter-position using Pollock's frame — rebutting (attack a premise) vs undercutting (attack the inferential warrant). Prefers undercutting when the conclusion has heavy independent support.
+Generates a counter-position using Pollock's frame — rebutting (attack a premise) vs undercutting (attack the inferential warrant). Prefers undercutting when the conclusion has heavy independent support. In v0.2, classifies the target argument against Walton's argumentation-scheme catalogue (expert opinion, popular opinion, cause-to-effect, analogy, sign, consequences, example, verbal classification) and presses the scheme's matching critical question.
 
 ### `extract-argument`
 
@@ -50,9 +50,15 @@ Decomposes free-form argumentative prose into Argdown, labelling each statement 
 
 Walks `sections[]` in document order, renders arguments + statements as flowing English, preserves relation semantics ("because" / "however").
 
+### `dung-extensions` (new in v0.2)
+
+> "compute the grounded extension" · "which arguments survive" · "are these arguments acceptable" · "find rejected arguments" · "find undecided arguments"
+
+Calls the `dung_extensions` MCP tool and reports the IN/OUT/UNDEC partition over the document's arguments under Dung's abstract argumentation framework (grounded semantics, via Caminada three-valued labelling). Only argument-to-argument attacks are considered; statement-level attacks and undercuts are intentionally ignored.
+
 ## How the MCP server is wired
 
-`.mcp.json` declares an `argdown-mcp` server. Once the plugin loads, Claude Code starts the server automatically. Tools `parse` and `export_json` become available; the skills call them. You don't need to install or run anything else.
+`.mcp.json` declares an `argdown-mcp` server. Once the plugin loads, Claude Code starts the server automatically. Tools `parse`, `export_json`, and `dung_extensions` become available; the skills call them. You don't need to install or run anything else.
 
 When v0.1 publishes to npm, swap the `.mcp.json` command from `node ${CLAUDE_PLUGIN_ROOT}/../dist/server.js` to `npx -y @casualtheorics/argdown-mcp`.
 

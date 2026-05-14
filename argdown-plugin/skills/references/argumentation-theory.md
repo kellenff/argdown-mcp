@@ -42,3 +42,39 @@ Toulmin's model assigns each statement a structural role: **claim** (conclusion 
 ```
 
 > Source: [Wikipedia — Stephen Toulmin](https://en.wikipedia.org/wiki/Stephen_Toulmin) <!-- source-verified: HTTP 200 via curl on 2026-05-13; https://plato.stanford.edu/entries/argumentation-models/ returned 404 -->
+
+## Dung — abstract argumentation framework
+
+Phan Minh Dung's framework (1995) models argumentation as a directed graph: nodes are **arguments**, edges are **attacks**. Acceptability is determined by graph-level semantics, not by the content of any single argument.
+
+An argument is **acceptable** under the grounded semantics if every attacker is itself defeated by an accepted argument (reinstatement). Caminada's three-valued labelling captures this: each argument is **IN** (accepted), **OUT** (defeated by an IN attacker), or **UNDEC** (caught in an unresolved cycle).
+
+```argdown
+<A>: claim a.
+  - <B>     // B attacks A
+<B>: claim b.
+  - <C>     // C attacks B
+<C>: claim c.   // unattacked → IN
+// Grounded: { in: [C, A], out: [B], undec: [] }
+```
+
+The `dung-extensions` skill calls `dung_extensions` and reports the IN/OUT/UNDEC partition. Only argument-to-argument `attack` relations are considered; statement-level attacks and undercuts belong to a structured-argumentation layer that v0.3 does not implement.
+
+> Source: [Stanford Encyclopedia of Philosophy — Argument and Argumentation §6](https://plato.stanford.edu/entries/argument/) <!-- source-verified: HTTP 200 via curl on 2026-05-14 -->
+
+## Walton — argumentation schemes
+
+Douglas Walton's _Argumentation Schemes_ (2008) catalogues recurring patterns of presumptive reasoning, each paired with **critical questions** that test the scheme's defeasibility. The `rebut-argument` skill uses scheme classification to pick the right critical question for the target argument:
+
+- **Expert opinion** — bias, qualification, explicit assertion.
+- **Popular opinion** — convergence vs. evidence.
+- **Cause-to-effect** — confounders, counter-instances.
+- **Analogy** — disanalogies, scope.
+- **Sign** — alternative causes of the sign.
+- **Consequences** — likelihood and relevance of the predicted outcome.
+- **Example** — representativeness, cherry-picking.
+- **Verbal classification** — does the case fit the definition?
+
+A scheme-aware rebuttal does not deny the conclusion outright; it raises the critical question whose unfavourable answer would defeat the presumption.
+
+> Source: [Wikipedia — Argumentation scheme](https://en.wikipedia.org/wiki/Argumentation_scheme) <!-- source-verified: HTTP 200 via curl on 2026-05-14 -->
