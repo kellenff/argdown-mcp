@@ -9,7 +9,7 @@ export type ShapeMode = "parse" | "export_json";
 export type McpToolResult = {
   isError?: boolean;
   content: Array<{ type: "text"; text: string }>;
-  structuredContent?: unknown;
+  structuredContent?: Record<string, unknown>;
 };
 
 /**

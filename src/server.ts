@@ -1,22 +1,6 @@
 #!/usr/bin/env node
 // Note: tsup's banner config also adds the shebang to dist/; this one is harmless in dev.
 
-// TASK 7 NOTE: src/tools/shared.ts is from task 6 (running in parallel).
-// Once merged, these local stubs disappear and the real imports take over.
-// Until then, this file typechecks against the expected shape.
-declare module "./tools/shared.js" {
-  import { z } from "zod";
-  export const InputSchema: z.ZodType<unknown>;
-  export type Input = unknown;
-  export function dispatch(
-    input: Input,
-    mode: "parse" | "export_json",
-  ): Promise<{
-    isError?: boolean;
-    content: Array<{ type: "text"; text: string }>;
-  }>;
-}
-
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { readFileSync } from "node:fs";
