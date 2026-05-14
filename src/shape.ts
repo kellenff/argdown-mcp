@@ -1,4 +1,4 @@
-import type { IArgdownResponse, IStatement } from "@argdown/core";
+import type { IArgdownResponse } from "@argdown/core";
 
 export type ShapeMode = "parse" | "export_json";
 
@@ -56,7 +56,9 @@ export function shapeResponse(
   const locationKeys = new Set<string>();
   for (const ec of Object.values(statements)) {
     for (const m of ec.members ?? []) {
-      locationKeys.add(locationKey(m));
+      locationKeys.add(
+        `${m.startLine ?? ""}:${m.startColumn ?? ""}:${m.endLine ?? ""}:${m.endColumn ?? ""}:${m.startOffset ?? ""}`,
+      );
     }
   }
 
@@ -135,8 +137,4 @@ export function shapeResponse(
     result.isError = true;
   }
   return result;
-}
-
-function locationKey(s: IStatement): string {
-  return `${s.startLine ?? ""}:${s.startColumn ?? ""}:${s.endLine ?? ""}:${s.endColumn ?? ""}:${s.startOffset ?? ""}`;
 }
