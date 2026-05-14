@@ -59,9 +59,8 @@ export function shapeResponse(
   // Count statements by distinct source-location across equivalence-class members.
   const locationKeys = new Set<string>();
   for (const key of Object.keys(statements)) {
-    const ec: IEquivalenceClass = statements[key]!;
-    const members: IStatement[] = ec.members ?? [];
-    for (const m of members) {
+    const ec = statements[key]!;
+    for (const m of ec.members ?? []) {
       locationKeys.add(locationKey(m));
     }
   }
