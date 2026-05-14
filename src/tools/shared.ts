@@ -76,30 +76,27 @@ export async function dispatch(
   const withJson = mode === "export_json";
 
   // Handler-side validation of the kind/source/path invariant.
-  if (input.kind === "inline") {
-    if (!input.source) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: "Invalid input: kind='inline' requires a non-empty `source` field.",
-          },
-        ],
-      };
-    }
-  } else {
-    if (!input.path) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: "Invalid input: kind='file' requires a non-empty `path` field.",
-          },
-        ],
-      };
-    }
+  if (input.kind === "inline" && !input.source) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Invalid input: kind='inline' requires a non-empty `source` field.",
+        },
+      ],
+    };
+  }
+  if (input.kind === "file" && !input.path) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Invalid input: kind='file' requires a non-empty `path` field.",
+        },
+      ],
+    };
   }
 
   try {
