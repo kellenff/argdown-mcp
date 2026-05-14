@@ -1,0 +1,62 @@
+{
+  "name": "@casualtheorics/argdown-mcp",
+  "version": "0.1.0",
+  "description": "stdio MCP server wrapping the Argdown argumentation toolchain (parse + JSON export)",
+  "type": "module",
+  "bin": {
+    "argdown-mcp": "./dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "os": [
+    "!win32"
+  ],
+  "packageManager": "yarn@4.14.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "argdown",
+    "argumentation",
+    "claude"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/casualtheorics/argdown-mcp.git"
+  },
+  "homepage": "https://github.com/casualtheorics/argdown-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/casualtheorics/argdown-mcp/issues"
+  },
+  "license": "MIT",
+  "author": "Casual Theorics",
+  "dependencies": {},
+  "devDependencies": {
+    "@argdown/core": "^2.0.1",
+    "@argdown/node": "^2.0.3",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/node": "^24",
+    "@yarnpkg/sdks": "^3.2.3",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vitest": "^4.1.6",
+    "zod": "^3"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "smoke": "bash scripts/smoke.sh",
+    "bundle-sanity": "bash scripts/bundle-sanity.sh",
+    "prepublishOnly": "yarn build && yarn typecheck && yarn test"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:argdown.org)",
+      "mcp__claude_ai_Context7__resolve-library-id",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "mcp__codebase-memory-mcp__index_status",
+      "Skill(claudikins-kernel:execute)"
+    ]
+  }
+}
