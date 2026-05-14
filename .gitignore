@@ -10,6 +10,17 @@ dist/
 .yarn/build-state.yml
 .yarn/cache/.gitkeep
 
+# Environment
+.env
+.env.*
+!.env.example
+
+# Coverage
+coverage/
+
+# Pack output
+*.tgz
+
 # OS
 .DS_Store
 

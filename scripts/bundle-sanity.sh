@@ -51,6 +51,8 @@ done
 echo "OK: no forbidden substrings found"
 
 # 6. Server responds to JSON-RPC initialize + tools/list from a fresh tmpdir
+#    Check 1 above already exits if dist/server.js is absent, so reaching here
+#    guarantees the file exists.
 TMPDIR_RUN="$(mktemp -d)"
 echo "Testing server startup in tmpdir: $TMPDIR_RUN"
 cp "$DIST_FILE" "$TMPDIR_RUN/server.js"
@@ -59,23 +61,69 @@ JSON_RPC_INPUT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protoco
 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
 '
 
-RESPONSE=$(echo "$JSON_RPC_INPUT" | node "$TMPDIR_RUN/server.js" 2>/dev/null || true)
+INPUT_FILE="$TMPDIR_RUN/input.jsonl"
+OUTPUT_FILE="$TMPDIR_RUN/out.jsonl"
+printf '%s' "$JSON_RPC_INPUT" > "$INPUT_FILE"
 
-if [[ -z "$RESPONSE" ]]; then
-  echo "FAIL: server produced no response to initialize + tools/list" >&2
+# Determine timeout command (macOS lacks timeout(1); use perl alarm as fallback)
+TIMEOUT_CMD=$(command -v gtimeout || command -v timeout || echo "")
+
+if [ -n "$TIMEOUT_CMD" ]; then
+  "$TIMEOUT_CMD" 10 node "$TMPDIR_RUN/server.js" < "$INPUT_FILE" > "$OUTPUT_FILE" 2>/dev/null
+  NODE_EXIT=$?
+else
+  perl -e 'alarm 10; exec @ARGV' node "$TMPDIR_RUN/server.js" < "$INPUT_FILE" > "$OUTPUT_FILE" 2>/dev/null
+  NODE_EXIT=$?
+fi
+
+if [[ $NODE_EXIT -ne 0 ]]; then
+  echo "FAIL: server exited with code $NODE_EXIT (or timed out after 10s)" >&2
+  echo "bundle-sanity: server did not respond within 10s" >&2
   rm -rf "$TMPDIR_RUN"
   exit 1
 fi
 
-# Check that response contains jsonrpc field (basic JSON-RPC response)
-if ! echo "$RESPONSE" | grep -q '"jsonrpc"'; then
-  echo "FAIL: server response does not look like JSON-RPC (no 'jsonrpc' field)" >&2
-  echo "Response was: $RESPONSE" >&2
-  rm -rf "$TMPDIR_RUN"
-  exit 1
-fi
+# Parse and assert the JSON-RPC responses using node
+node -e "
+const fs = require('fs');
+const lines = fs.readFileSync('$OUTPUT_FILE', 'utf8').trim().split('\n').filter(l => l.trim());
 
+if (lines.length < 2) {
+  console.error('FAIL: expected at least 2 JSON-RPC response lines, got ' + lines.length);
+  process.exit(1);
+}
+
+let id2Response = null;
+for (const line of lines) {
+  let obj;
+  try { obj = JSON.parse(line); } catch (e) {
+    console.error('FAIL: could not parse response line as JSON: ' + line);
+    process.exit(1);
+  }
+  if (obj.id === 2) { id2Response = obj; }
+}
+
+if (!id2Response) {
+  console.error('FAIL: no JSON-RPC response with id=2 (tools/list) found in output');
+  process.exit(1);
+}
+
+if (id2Response.error !== undefined) {
+  console.error('FAIL: tools/list response (id=2) has an error field: ' + JSON.stringify(id2Response));
+  process.exit(1);
+}
+
+if (!id2Response.result || !Array.isArray(id2Response.result.tools)) {
+  console.error('FAIL: tools/list response (id=2) result.tools is not an array: ' + JSON.stringify(id2Response));
+  process.exit(1);
+}
+
+console.log('OK: server responds to JSON-RPC initialize + tools/list (tools count: ' + id2Response.result.tools.length + ')');
+"
+PARSE_EXIT=$?
 rm -rf "$TMPDIR_RUN"
-echo "OK: server responds to JSON-RPC initialize + tools/list"
+if [[ $PARSE_EXIT -ne 0 ]]; then
+  exit 1
+fi
 
 echo "=== bundle-sanity: all checks passed ==="
