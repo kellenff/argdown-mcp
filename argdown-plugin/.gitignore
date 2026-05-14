@@ -1,0 +1,5 @@
+# Yarn PnP — zero-installs: COMMIT .pnp.*, .yarn/cache, .yarn/releases
+# but IGNORE these:
+.yarn/install-state.gz
+.yarn/unplugged/
+.yarn/build-state.yml

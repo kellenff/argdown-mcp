@@ -1,0 +1,12 @@
+{
+  "name": "@casualtheorics/argdown-plugin",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for Argdown reasoning — 6 skills + auto-registered MCP server",
+  "author": {
+    "name": "Casual Theorics"
+  },
+  "homepage": "https://github.com/kellenff/argdown-mcp",
+  "repository": "https://github.com/kellenff/argdown-mcp",
+  "license": "MIT",
+  "keywords": ["argdown", "argumentation", "claude-code", "plugin", "mcp"]
+}
