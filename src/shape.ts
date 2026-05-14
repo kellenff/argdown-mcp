@@ -1,8 +1,4 @@
-import type {
-  IArgdownResponse,
-  IEquivalenceClass,
-  IStatement,
-} from "@argdown/core";
+import type { IArgdownResponse, IStatement } from "@argdown/core";
 
 export type ShapeMode = "parse" | "export_json";
 
@@ -102,7 +98,7 @@ export function shapeResponse(
   // yields key/title "Untitled 1"; valid `[Hello]: world` yields title "Hello".
   const syntheticTitle = /^Untitled \d+$/;
   const hasTitledStatement = Object.values(statements).some((ec) => {
-    const title = (ec as IEquivalenceClass).title;
+    const title = ec.title;
     return typeof title === "string" && !syntheticTitle.test(title);
   });
   const hasArgument = argumentCount > 0;
