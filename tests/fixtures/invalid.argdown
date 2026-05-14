@@ -1,0 +1,8 @@
+# Malformed Argdown Document
+
+[Valid Statement]: This statement is fine.
+
+[Unclosed Bracket: This statement has a missing closing bracket and will cause a parse error.
+  + [Valid Statement]
+
+<Also Valid Argument>: This argument follows the broken statement.

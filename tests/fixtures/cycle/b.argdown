@@ -1,0 +1,6 @@
+@import "a.argdown"
+
+# File B
+
+[B Claim]: This claim is defined in file B and references content from file A, creating a cycle.
+  + [A Claim]
