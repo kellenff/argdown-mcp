@@ -8,8 +8,6 @@ Claude Code plugin for reasoning about Argdown. Auto-registers the [argdown-mcp]
 claude plugin install @casualtheorics/argdown-plugin
 ```
 
-> **⚠ Dev status (v0.2 pre-release):** the underlying `@casualtheorics/argdown-mcp` package is not yet on npm. The plugin's `.mcp.json` currently points at a local clone via `${CLAUDE_PLUGIN_ROOT}/../dist/server.js`. To use the plugin in another context: either wait for v0.1 to publish, or edit `.mcp.json` to point at your local argdown-mcp build.
-
 ## What you get
 
 Once installed, Claude activates one of these skills based on what you ask:
@@ -58,9 +56,7 @@ Calls the `dung_extensions` MCP tool and reports the IN/OUT/UNDEC partition over
 
 ## How the MCP server is wired
 
-`.mcp.json` declares an `argdown-mcp` server. Once the plugin loads, Claude Code starts the server automatically. Tools `parse`, `export_json`, and `dung_extensions` become available; the skills call them. You don't need to install or run anything else.
-
-When v0.1 publishes to npm, swap the `.mcp.json` command from `node ${CLAUDE_PLUGIN_ROOT}/../dist/server.js` to `npx -y @casualtheorics/argdown-mcp`.
+`.mcp.json` declares an `argdown-mcp` server. Once the plugin loads, Claude Code starts the server automatically via `npx -y @casualtheorics/argdown-mcp`. Tools `parse`, `export_json`, and `dung_extensions` become available; the skills call them. You don't need to install or run anything else.
 
 ## Regenerating the schema reference
 
