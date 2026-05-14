@@ -14,6 +14,9 @@
  * are verified against the upstream singletons:
  *   - `@argdown/core/dist/argdown.js` (parse-input, build-model, export-json)
  *   - `@argdown/node/dist/argdown.js` (load-file)
+ *
+ * The `(withFileIO: true, async: false)` combination is a compile-time error
+ * enforced by the `BuildAppOptions` discriminated union.
  */
 
 import {
@@ -28,23 +31,42 @@ import {
   LoadFilePlugin,
 } from "@argdown/node";
 
-export type BuildAppOptions = {
-  /** When true, returns an `AsyncArgdownApplication`; otherwise a sync `ArgdownApplication`. */
-  async: boolean;
-  /** When true, registers `JSONExportPlugin` and defines the `"export-json"` process. */
-  withJson: boolean;
-  /**
-   * When true, registers `LoadFilePlugin` + `IncludePlugin` at the `"load-file"`
-   * stage and prepends `"load-file"` to the named processes.
-   *
-   * NOTE: `LoadFilePlugin` and `IncludePlugin` are async-only
-   * (`IAsyncArgdownPlugin`). Setting `withFileIO: true` together with
-   * `async: false` will register plugins that the sync application cannot
-   * execute; callers should pair `withFileIO: true` with `async: true`.
-   */
-  withFileIO: boolean;
-};
+// The (withFileIO: true, async: false) combination is a compile-time error enforced here.
+export type BuildAppOptions =
+  | {
+      /** When true, returns an `AsyncArgdownApplication`. */
+      async: true;
+      /** When true, registers `JSONExportPlugin` and defines the `"export-json"` process. */
+      withJson: boolean;
+      /**
+       * When true, registers `LoadFilePlugin` + `IncludePlugin` at the `"load-file"`
+       * stage and prepends `"load-file"` to the named processes.
+       */
+      withFileIO: boolean;
+    }
+  | {
+      /** When false, returns a sync `ArgdownApplication`. */
+      async: false;
+      /** When true, registers `JSONExportPlugin` and defines the `"export-json"` process. */
+      withJson: boolean;
+      /**
+       * Must be `false` when `async` is `false` — `LoadFilePlugin` and
+       * `IncludePlugin` are async-only (`IAsyncArgdownPlugin`) and cannot be
+       * executed by a sync application.
+       */
+      withFileIO: false;
+    };
 
+export function buildApp(opts: {
+  async: true;
+  withJson: boolean;
+  withFileIO: boolean;
+}): AsyncArgdownApplication;
+export function buildApp(opts: {
+  async: false;
+  withJson: boolean;
+  withFileIO: false;
+}): ArgdownApplication;
 export function buildApp(
   opts: BuildAppOptions,
 ): ArgdownApplication | AsyncArgdownApplication {
