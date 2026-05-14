@@ -3,9 +3,7 @@
   "version": "0.1.0",
   "description": "stdio MCP server wrapping the Argdown argumentation toolchain (parse + JSON export)",
   "type": "module",
-  "bin": {
-    "argdown-mcp": "./dist/server.js"
-  },
+  "bin": "./dist/server.js",
   "files": [
     "dist",
     "README.md",
@@ -38,11 +36,14 @@
   },
   "license": "MIT",
   "author": "Casual Theorics",
-  "dependencies": {},
+  "dependencies": {
+    "@argdown/node": "^2.0.3"
+  },
   "devDependencies": {
     "@argdown/core": "^2.0.1",
     "@argdown/node": "^2.0.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rollup/rollup-darwin-arm64": "^4.60.3",
     "@types/node": "^24",
     "@yarnpkg/sdks": "^3.2.3",
     "tsup": "^8",

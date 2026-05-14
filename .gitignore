@@ -27,3 +27,7 @@ coverage/
 # Editor
 .vscode/settings.json
 .idea/
+
+# Kernel orchestration artefacts
+.claude/
+.serena/

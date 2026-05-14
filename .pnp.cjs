@@ -32,6 +32,7 @@ const RAW_RUNTIME_STATE =
           ["@argdown/node", "npm:2.0.3"],\
           ["@casualtheorics/argdown-mcp", "workspace:."],\
           ["@modelcontextprotocol/sdk", "virtual:994cf1c293651b2a3ef1ad0e75969e7b2ea2ac90959feffba1d9667b8ebf92f34aab9ec7f0c886485c38663abcaec2ed778e9fccdf1b8eba96f537aa14b868ef#npm:1.29.0"],\
+          ["@rollup/rollup-darwin-arm64", "npm:4.60.3"],\
           ["@types/node", "npm:24.12.4"],\
           ["@yarnpkg/sdks", "npm:3.2.3"],\
           ["tsup", "virtual:994cf1c293651b2a3ef1ad0e75969e7b2ea2ac90959feffba1d9667b8ebf92f34aab9ec7f0c886485c38663abcaec2ed778e9fccdf1b8eba96f537aa14b868ef#npm:8.5.1"],\
@@ -122,6 +123,7 @@ const RAW_RUNTIME_STATE =
           ["@argdown/node", "npm:2.0.3"],\
           ["@casualtheorics/argdown-mcp", "workspace:."],\
           ["@modelcontextprotocol/sdk", "virtual:994cf1c293651b2a3ef1ad0e75969e7b2ea2ac90959feffba1d9667b8ebf92f34aab9ec7f0c886485c38663abcaec2ed778e9fccdf1b8eba96f537aa14b868ef#npm:1.29.0"],\
+          ["@rollup/rollup-darwin-arm64", "npm:4.60.3"],\
           ["@types/node", "npm:24.12.4"],\
           ["@yarnpkg/sdks", "npm:3.2.3"],\
           ["tsup", "virtual:994cf1c293651b2a3ef1ad0e75969e7b2ea2ac90959feffba1d9667b8ebf92f34aab9ec7f0c886485c38663abcaec2ed778e9fccdf1b8eba96f537aa14b868ef#npm:8.5.1"],\

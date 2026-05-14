@@ -79,6 +79,7 @@ __metadata:
     "@argdown/core": "npm:^2.0.1"
     "@argdown/node": "npm:^2.0.3"
     "@modelcontextprotocol/sdk": "npm:^1.29.0"
+    "@rollup/rollup-darwin-arm64": "npm:^4.60.3"
     "@types/node": "npm:^24"
     "@yarnpkg/sdks": "npm:^3.2.3"
     tsup: "npm:^8"
@@ -624,9 +625,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rollup/rollup-darwin-arm64@npm:4.60.3":
+"@rollup/rollup-darwin-arm64@npm:4.60.3, @rollup/rollup-darwin-arm64@npm:^4.60.3":
   version: 4.60.3
   resolution: "@rollup/rollup-darwin-arm64@npm:4.60.3"
+  checksum: 10c0/8869930149fa4a1c2b3a1fdfb782ba3f3b28efc523027a5275772ca7e804d88d3c4bed44d575a450d0ed84ab304f263720e09781fa2b390e17f4c5c0a1febf92
   conditions: os=darwin & cpu=arm64
   languageName: node
   linkType: hard

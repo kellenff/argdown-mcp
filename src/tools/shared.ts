@@ -37,24 +37,35 @@ import { runInline } from "../argdown/inline.js";
 import { runFile } from "../argdown/file.js";
 import { shapeResponse, type ShapeMode, type McpToolResult } from "../shape.js";
 
-export const InputSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("inline"),
-    source: z
-      .string()
-      .min(1)
-      .describe("Inline Argdown source string to parse."),
-  }),
-  z.object({
-    kind: z.literal("file"),
-    path: z
-      .string()
-      .min(1)
-      .describe(
-        "Filesystem path to a .argdown file. @import directives resolve relative to this file.",
-      ),
-  }),
-]);
+// NOTE: We *want* a discriminated union here, but the MCP SDK's
+// `normalizeObjectSchema` only accepts a Zod raw shape or `z.object(...)`.
+// A discriminated union returns `undefined` from normalisation and the SDK
+// silently emits an empty schema to clients. So we use a flat shape with
+// `kind` as a string-literal discriminator and validate the
+// "exactly-one-of source/path" invariant in the handler.
+export const InputShape = {
+  kind: z
+    .enum(["inline", "file"])
+    .describe(
+      "Input mode. 'inline' parses the `source` string directly; 'file' loads the file at `path` and resolves @import directives.",
+    ),
+  source: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Inline Argdown source string. Required when kind='inline'; ignored when kind='file'.",
+    ),
+  path: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Filesystem path to a .argdown file. Required when kind='file'; ignored when kind='inline'. @import directives resolve relative to this file.",
+    ),
+};
+
+export const InputSchema = z.object(InputShape);
 
 export type Input = z.infer<typeof InputSchema>;
 
@@ -64,11 +75,38 @@ export async function dispatch(
 ): Promise<McpToolResult> {
   const withJson = mode === "export_json";
 
+  // Handler-side validation of the kind/source/path invariant.
+  if (input.kind === "inline") {
+    if (!input.source) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Invalid input: kind='inline' requires a non-empty `source` field.",
+          },
+        ],
+      };
+    }
+  } else {
+    if (!input.path) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Invalid input: kind='file' requires a non-empty `path` field.",
+          },
+        ],
+      };
+    }
+  }
+
   try {
     const response =
       input.kind === "inline"
-        ? runInline(input.source, { withJson })
-        : await runFile(input.path, { withJson });
+        ? runInline(input.source!, { withJson })
+        : await runFile(input.path!, { withJson });
     return shapeResponse(response, mode);
   } catch (err) {
     // Defensive: runInline/runFile use `throwExceptions: false` and project

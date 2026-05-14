@@ -1,12 +1,13 @@
-#!/usr/bin/env node
-// Note: tsup's banner config also adds the shebang to dist/; this one is harmless in dev.
+// Shebang is added by tsup's banner config (see tsup.config.ts).
+// We do NOT put #!/usr/bin/env node here — the source isn't directly executed,
+// and a source-level shebang would duplicate into the bundle and break ESM parse.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { InputSchema, dispatch } from "./tools/shared.js";
+import { InputShape, dispatch, type Input } from "./tools/shared.js";
 
 // Read version from package.json (relative to source; tsup bundles this read
 // such that `dist/server.js` resolves `../package.json` to the package root).
@@ -35,13 +36,13 @@ server.registerTool(
   {
     description:
       "Parse an Argdown document and return diagnostics (lexer errors, parser errors, exceptions) plus a summary of statement/argument/section counts.",
-    inputSchema: InputSchema,
+    inputSchema: InputShape,
     annotations: {
       readOnlyHint: true,
       openWorldHint: false,
     },
   },
-  async (input) => dispatch(input as never, "parse"),
+  async (input) => dispatch(input as Input, "parse"),
 );
 
 server.registerTool(
@@ -49,13 +50,13 @@ server.registerTool(
   {
     description:
       "Parse an Argdown document and emit the full AST as a JSON string, plus the same diagnostics as `parse`.",
-    inputSchema: InputSchema,
+    inputSchema: InputShape,
     annotations: {
       readOnlyHint: true,
       openWorldHint: false,
     },
   },
-  async (input) => dispatch(input as never, "export_json"),
+  async (input) => dispatch(input as Input, "export_json"),
 );
 
 // Signal handling: stdio MCP servers must exit promptly on parent disconnect / SIGPIPE.
