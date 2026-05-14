@@ -1,7 +1,7 @@
 {
   "name": "@casualtheorics/argdown-mcp",
-  "version": "0.1.0",
-  "description": "stdio MCP server wrapping the Argdown argumentation toolchain (parse + JSON export)",
+  "version": "0.2.0",
+  "description": "stdio MCP server wrapping the Argdown argumentation toolchain (parse + JSON export + Dung grounded extension)",
   "type": "module",
   "bin": "./dist/server.js",
   "files": [

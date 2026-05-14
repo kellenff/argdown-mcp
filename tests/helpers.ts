@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { InputShape, dispatch, type Input } from "../src/tools/shared.js";
+import { dispatchDung } from "../src/tools/dung.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +62,17 @@ export async function makeClient(): Promise<Harness> {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => dispatch(input as Input, "export_json"),
+  );
+
+  server.registerTool(
+    "dung_extensions",
+    {
+      description:
+        "Compute the grounded extension under Dung's abstract argumentation framework.",
+      inputSchema: InputShape,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (input) => dispatchDung(input as Input),
   );
 
   const [clientTransport, serverTransport] =

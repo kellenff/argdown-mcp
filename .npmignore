@@ -1,0 +1,15 @@
+# Kernel orchestration artefacts (worktrees, reviews, etc.)
+.claude/
+
+# Source and config — not needed in the published package
+src/
+tests/
+scripts/
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+.yarnrc.yml
+.pnp.cjs
+.pnp.loader.mjs
+.yarn/
+yarn.lock

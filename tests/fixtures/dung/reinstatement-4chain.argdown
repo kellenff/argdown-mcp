@@ -1,0 +1,8 @@
+<A>: claim a.
+  - <B>
+
+<B>: claim b.
+  - <C>
+
+<C>: claim c.
+  - <D>: claim d.

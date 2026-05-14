@@ -17,12 +17,12 @@ import path from "node:path";
 import { makeClient, fixtureDir, firstText } from "./helpers.js";
 
 describe("SC 1 — tools register correctly", () => {
-  it("exposes `parse` and `export_json` with the flat InputShape", async () => {
+  it("exposes `parse`, `export_json`, and `dung_extensions` with the flat InputShape", async () => {
     const { client, close } = await makeClient();
     try {
       const tools = await client.listTools();
       const names = tools.tools.map((t) => t.name).sort();
-      expect(names).toEqual(["export_json", "parse"]);
+      expect(names).toEqual(["dung_extensions", "export_json", "parse"]);
 
       for (const t of tools.tools) {
         const schema = t.inputSchema as {
@@ -219,6 +219,270 @@ describe("SC 7 — non-Argdown file returns isError with (not valid Argdown) hin
         arguments: { kind: "inline", source: "[a]: still works" },
       });
       expect(ok.isError).toBeFalsy();
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-2 — 3-cycle yields all UNDEC", () => {
+  it("returns { in: [], out: [], undec: [A,B,C] } under grounded semantics", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "three-cycle.argdown"),
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in).toEqual([]);
+      expect(json.extension.out).toEqual([]);
+      expect(json.extension.undec.sort()).toEqual(["A", "B", "C"]);
+      expect(json.argumentCount).toBe(3);
+      expect(json.attackCount).toBe(3);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-3 — defended argument", () => {
+  it("B attacks A, B unattacked: { in: [B], out: [A] }", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "defended.argdown"),
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in).toEqual(["B"]);
+      expect(json.extension.out).toEqual(["A"]);
+      expect(json.extension.undec).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-4 — reinstatement (4-chain D attacks C attacks B attacks A)", () => {
+  // Load-bearing: catches naive "unattacked=IN, attacked=OUT" implementations.
+  // D unattacked → IN. C attacked by D (IN) → OUT. B attacked by C (only attacker, OUT) → IN.
+  // A attacked by B (IN) → OUT. The fixpoint REINSTATES B via C's defeat.
+  it("yields { in: [B,D], out: [A,C] } via reinstatement", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "reinstatement-4chain.argdown"),
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in.sort()).toEqual(["B", "D"]);
+      expect(json.extension.out.sort()).toEqual(["A", "C"]);
+      expect(json.extension.undec).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-5 — no attacks", () => {
+  it("all arguments IN, OUT and UNDEC empty", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "no-attacks.argdown"),
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in.sort()).toEqual(["A", "B", "C"]);
+      expect(json.extension.out).toEqual([]);
+      expect(json.extension.undec).toEqual([]);
+      expect(json.attackCount).toBe(0);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-6 — empty / argument-free document", () => {
+  it("all three sets empty, no throw", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "empty.argdown"),
+        },
+      });
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in).toEqual([]);
+      expect(json.extension.out).toEqual([]);
+      expect(json.extension.undec).toEqual([]);
+      expect(json.argumentCount).toBe(0);
+      expect(json.attackCount).toBe(0);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-7 — self-attack convention", () => {
+  it("isolated self-attacker is UNDEC", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "self-attack-alone.argdown"),
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in).toEqual([]);
+      expect(json.extension.out).toEqual([]);
+      expect(json.extension.undec).toEqual(["S"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("self-attacker defeated by unattacked outsider: outsider IN, self-attacker OUT", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "self-attack-defeated.argdown"),
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in).toEqual(["T"]);
+      expect(json.extension.out).toEqual(["S"]);
+      expect(json.extension.undec).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-8 — statement-level attacks ignored", () => {
+  it("doc with only statement attacks → all arguments IN, attackCount 0", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "file",
+          path: path.join(fixtureDir, "dung", "statement-attack-only.argdown"),
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in.sort()).toEqual(["A", "B"]);
+      expect(json.extension.out).toEqual([]);
+      expect(json.extension.undec).toEqual([]);
+      expect(json.attackCount).toBe(0);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("Dung SC-9 — both source and path input modes work", () => {
+  it("inline source path produces a grounded extension", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: {
+          kind: "inline",
+          source: "<A>: a.\n  - <B>: b.\n",
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      const json = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)![1]!);
+      expect(json.extension.in).toEqual(["B"]);
+      expect(json.extension.out).toEqual(["A"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects kind='inline' with no source", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: { kind: "inline" },
+      });
+      expect(result.isError).toBe(true);
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      expect(text.toLowerCase()).toContain("source");
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects kind='file' with no path", async () => {
+    const { client, close } = await makeClient();
+    try {
+      const result = await client.callTool({
+        name: "dung_extensions",
+        arguments: { kind: "file" },
+      });
+      expect(result.isError).toBe(true);
+      const text = firstText(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      expect(text.toLowerCase()).toContain("path");
     } finally {
       await close();
     }

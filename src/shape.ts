@@ -1,4 +1,5 @@
 import type { IArgdownResponse } from "@argdown/core";
+import type { DungResult } from "./argdown/dung.js";
 
 export type ShapeMode = "parse" | "export_json";
 
@@ -134,6 +135,66 @@ export function shapeResponse(
     content: [{ type: "text", text: lines.join("\n") }],
   };
   if (isError) {
+    result.isError = true;
+  }
+  return result;
+}
+
+/**
+ * Project a Dung grounded-extension result into an MCP tool result.
+ *
+ * Output format:
+ *   - Plain-English summary line: "Grounded extension: N IN, M OUT, K UNDEC over A arguments and R attacks."
+ *   - JSON block with the full IN/OUT/UNDEC partition and counts.
+ *
+ * Diagnostics (lexer / parser / exceptions from the underlying parse) are
+ * surfaced verbatim from the Argdown response so callers see why the graph
+ * may be incomplete. A document with parse errors can still produce a
+ * partial grounded extension over whatever arguments survived parsing.
+ */
+export function shapeDungResponse(
+  resp: IArgdownResponse,
+  dung: DungResult,
+): McpToolResult {
+  const lexerErrors = resp.lexerErrors ?? [];
+  const parserErrors = resp.parserErrors ?? [];
+  const exceptions = resp.exceptions ?? [];
+  const hasDiagnostics =
+    lexerErrors.length > 0 || parserErrors.length > 0 || exceptions.length > 0;
+
+  const lines: string[] = [];
+  lines.push(
+    `Grounded extension: ${dung.extension.in.length} IN, ${dung.extension.out.length} OUT, ${dung.extension.undec.length} UNDEC over ${dung.argumentCount} arguments and ${dung.attackCount} attacks.`,
+  );
+
+  if (hasDiagnostics) {
+    lines.push("Diagnostics:");
+    for (const e of lexerErrors) {
+      lines.push(`  lex L${e.line}:${e.column}: ${e.message}`);
+    }
+    for (const e of parserErrors) {
+      const t = e.token;
+      lines.push(`  parse L${t?.startLine}:${t?.startColumn}: ${e.message}`);
+    }
+    for (const e of exceptions) {
+      lines.push(`  exception: ${e.message}`);
+    }
+  }
+
+  const payload = {
+    extension: dung.extension,
+    argumentCount: dung.argumentCount,
+    attackCount: dung.attackCount,
+  };
+  lines.push("Extension:");
+  lines.push("```json");
+  lines.push(JSON.stringify(payload, null, 2));
+  lines.push("```");
+
+  const result: McpToolResult = {
+    content: [{ type: "text", text: lines.join("\n") }],
+  };
+  if (hasDiagnostics) {
     result.isError = true;
   }
   return result;

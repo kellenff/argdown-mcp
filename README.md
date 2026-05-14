@@ -1,6 +1,6 @@
 # @casualtheorics/argdown-mcp
 
-An MCP server that exposes [Argdown](https://argdown.org/) parsing and JSON export to language models. Give Claude (or any MCP-capable model) the ability to parse, validate, and inspect Argdown documents — including files with `@import` directives. This server does not render HTML, SVG, dot, or PDF; it is strictly a parse/validate/export tool.
+An MCP server that exposes [Argdown](https://argdown.org/) parsing, JSON export, and Dung grounded-extension reasoning to language models. Give Claude (or any MCP-capable model) the ability to parse, validate, inspect, and resolve attacks within Argdown documents — including files with `@import` directives. This server does not render HTML, SVG, dot, or PDF; it is strictly a parse/validate/export/extension tool.
 
 ## Install
 
@@ -73,6 +73,38 @@ Same as `parse`, but also returns the full `IArgdownResponse.json` payload in a 
 **Input:** same shape as `parse`.
 
 **Returns:** everything `parse` returns, plus a JSON block containing statements, arguments, relations, and sections as structured data.
+
+### `dung_extensions`
+
+Computes the grounded extension under [Dung's abstract argumentation framework](https://plato.stanford.edu/entries/argument/) — i.e., which arguments survive once every attack has been resolved. Uses Caminada's three-valued labelling algorithm.
+
+**Input:** same shape as `parse` / `export_json`.
+
+**Returns:**
+
+- A summary line: `Grounded extension: N IN, M OUT, K UNDEC over A arguments and R attacks.`
+- A fenced JSON block with the full partition:
+
+```json
+{
+  "extension": { "in": ["..."], "out": ["..."], "undec": ["..."] },
+  "argumentCount": 0,
+  "attackCount": 0
+}
+```
+
+**Semantics:**
+
+- **IN** — accepted: every attacker of this argument is OUT.
+- **OUT** — defeated: at least one attacker is IN.
+- **UNDEC** — undecided: caught in an unresolved cycle.
+
+**Scope:**
+
+- Only **argument-to-argument** attack relations are considered (written `<X>\n  - <Y>` in Argdown). Statement-level attacks (`[s1]\n  - [s2]`) are intentionally ignored — Dung's framework is abstract over arguments; lifting statement attacks belongs to a structured-argumentation layer (ASPIC+, ABA), which is out of scope.
+- Only the **grounded** semantics is computed. Preferred, stable, complete, semi-stable, and ideal semantics are out of scope for v0.2.
+- Undercuts (`relationType: "undercut"`) target inference nodes, not arguments, and are filtered out.
+- A self-attacker with no external defeater is UNDEC; with an IN external defeater, it is OUT.
 
 ## Architecture
 
