@@ -192,21 +192,12 @@ describe("SC 6 — kind/source/path enforcement", () => {
   });
 });
 
-describe("SC 7 — non-Argdown file is parsed without killing the server", () => {
-  // Production behaviour gap (surfaced in task-9 JSON output, NOT fixed here):
-  // `@argdown/core` is extremely permissive — it parses arbitrary prose as
-  // untitled statements, so `tests/fixtures/not-argdown.txt` returns
-  // `statementCount > 0` with zero diagnostics, and `shapeResponse` reports
-  // `isError` undefined (i.e. "valid"). Plan SC 7 expected `isError: true`
-  // + a "(not valid Argdown)" hint; the shipped heuristic in `shape.ts`
-  // (`!inputWasEmpty && noContent && !hasDiagnostics`) cannot fire for this
-  // input.
-  //
-  // We therefore assert the load-bearing invariant the success criterion
-  // actually protects: the server returns a response and stays alive for a
-  // follow-up call. The richer "not valid Argdown" assertion is captured as
-  // a production-bug note rather than a test failure.
-  it("returns a response and stays alive for follow-up calls", async () => {
+describe("SC 7 — non-Argdown file returns isError with (not valid Argdown) hint", () => {
+  // The tightened heuristic in shape.ts requires at least one *titled* statement,
+  // argument, section, or relation before declaring input valid. Plain prose
+  // (which @argdown/core parses into 'Untitled N' synthetic statements only)
+  // now correctly fails the looks-like-argdown gate.
+  it("flags not-argdown.txt with isError + 'not valid Argdown' hint and stays alive", async () => {
     const { client, close } = await makeClient();
     try {
       const result = await client.callTool({
@@ -216,12 +207,11 @@ describe("SC 7 — non-Argdown file is parsed without killing the server", () =>
           path: path.join(fixtureDir, "not-argdown.txt"),
         },
       });
-      expect(result).toBeDefined();
-      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.isError).toBe(true);
       const text = firstText(
         result as { content: Array<{ type: string; text?: string }> },
       );
-      expect(text).toMatch(/Parsed \d+ statements/);
+      expect(text).toMatch(/not valid Argdown/i);
 
       // Server still answers afterwards.
       const ok = await client.callTool({

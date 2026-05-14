@@ -92,12 +92,29 @@ export function shapeResponse(
     }
   }
 
-  // "Not valid Argdown" hint: non-empty input that produced zero statements
-  // AND zero errors. Empty input (zero tokens) is a valid edge — no hint.
+  // "Not valid Argdown" hint: @argdown/core 2.x is extremely permissive — it
+  // parses arbitrary prose into anonymous "untitled statements" with auto-
+  // generated titles of the form "Untitled N" (capital U, single space, integer
+  // counter). A statementCount===0 check therefore almost never fires for
+  // free-form text. The honest heuristic: declare the input Argdown only if it
+  // contains at least one *titled* statement, an argument, a section, or a
+  // relation. Synthetic-title pattern verified by local probe against
+  // @argdown/core 2.0.1: `runInline("Just a sentence.", ...).statements`
+  // yields key/title "Untitled 1"; valid `[Hello]: world` yields title "Hello".
+  const syntheticTitle = /^Untitled \d+$/;
+  const hasTitledStatement = Object.values(statements).some((ec) => {
+    const title = (ec as IEquivalenceClass).title;
+    return typeof title === "string" && !syntheticTitle.test(title);
+  });
+  const hasArgument = argumentCount > 0;
+  const hasSection = sectionCount > 0;
+  const hasRelation = (resp.relations ?? []).length > 0;
+  const looksLikeArgdown =
+    hasTitledStatement || hasArgument || hasSection || hasRelation;
+
   const inputWasEmpty = tokens.length === 0;
-  const noContent =
-    statementCount === 0 && argumentCount === 0 && sectionCount === 0;
-  const notValidArgdown = !inputWasEmpty && noContent && !hasDiagnostics;
+  const notValidArgdown =
+    !inputWasEmpty && !looksLikeArgdown && !hasDiagnostics;
 
   if (notValidArgdown) {
     lines.push("(not valid Argdown)");

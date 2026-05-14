@@ -1,8 +1,4 @@
-# Malformed Argdown Document
+/* Deliberately malformed: an orphan outgoing-support relation marker (`+`)
+   with no preceding paragraph triggers a parser error in @argdown/core 2.x. */
 
-[Valid Statement]: This statement is fine.
-
-[Unclosed Bracket: This statement has a missing closing bracket and will cause a parse error.
-  + [Valid Statement]
-
-<Also Valid Argument>: This argument follows the broken statement.
+  +
