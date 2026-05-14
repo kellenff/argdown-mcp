@@ -50,7 +50,7 @@ export function shapeResponse(
 
   const lexerErrors = resp.lexerErrors ?? [];
   const parserErrors = resp.parserErrors ?? [];
-  const exceptions: Error[] = resp.exceptions ?? [];
+  const exceptions = resp.exceptions ?? [];
 
   // Count statements by distinct source-location across equivalence-class members.
   const locationKeys = new Set<string>();
