@@ -92,7 +92,7 @@ export function buildApp(
 
   // Named processes. Compose stage lists conditionally so we never reference
   // a stage that has no registered plugins.
-  const parseStages: string[] = opts.withFileIO
+  const parseStages = opts.withFileIO
     ? ["load-file", "parse-input", "build-model"]
     : ["parse-input", "build-model"];
 
