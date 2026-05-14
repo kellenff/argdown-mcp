@@ -1,0 +1,45 @@
+{
+  "name": "@casualtheorics/argdown-plugin",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for Argdown reasoning — 6 skills + auto-registered MCP server",
+  "license": "MIT",
+  "author": "Casual Theorics",
+  "homepage": "https://github.com/kellenff/argdown-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kellenff/argdown-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kellenff/argdown-mcp/issues"
+  },
+  "keywords": [
+    "argdown",
+    "argumentation",
+    "claude-code",
+    "plugin",
+    "mcp"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "!win32"
+  ],
+  "packageManager": "yarn@4.14.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    ".claude-plugin",
+    ".mcp.json",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "schema-probe": "yarn node scripts/schema-probe.mjs",
+    "validate-plugin": "echo 'TODO: ajv-validate plugin.json + .mcp.json'",
+    "dry-publish": "yarn npm publish --dry-run --access public",
+    "release": "yarn npm publish --access public"
+  }
+}
