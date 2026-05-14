@@ -102,11 +102,11 @@ export function shapeResponse(
     const title = ec.title;
     return typeof title === "string" && !syntheticTitle.test(title);
   });
-  const hasArgument = argumentCount > 0;
-  const hasSection = sectionCount > 0;
-  const hasRelation = (resp.relations ?? []).length > 0;
   const looksLikeArgdown =
-    hasTitledStatement || hasArgument || hasSection || hasRelation;
+    hasTitledStatement ||
+    argumentCount > 0 ||
+    sectionCount > 0 ||
+    (resp.relations ?? []).length > 0;
 
   const inputWasEmpty = tokens.length === 0;
   const notValidArgdown =
