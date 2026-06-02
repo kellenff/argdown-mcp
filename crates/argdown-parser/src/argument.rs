@@ -21,7 +21,10 @@ pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
             title,
             description,
             is_reference: false,
-            span: Span { start: span.start, end },
+            span: Span {
+                start: span.start,
+                end,
+            },
         })
     } else {
         inline_ws.parse_next(input)?;
