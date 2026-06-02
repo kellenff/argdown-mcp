@@ -1,7 +1,7 @@
-//! Winnow-based parser for the Argdown format (increment A1: spine).
+//! Winnow-based parser for the Argdown format.
 //!
-//! Parses headings, plain and titled statements, and comments into an
-//! [`argdown_core::Document`]. See the A1 spine design spec.
+//! Parses the document spine (headings, statements, comments) and statement
+//! references into an [`argdown_core::Document`]. Grows by increment.
 
 mod heading;
 mod statement;

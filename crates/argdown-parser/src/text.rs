@@ -26,9 +26,11 @@ pub(crate) fn block_head(input: &mut Input<'_>) -> ModalResult<()> {
         .parse_next(input)
 }
 
-/// One continuation content line: not EOF, blank, a heading, a comment, or a
-/// new block. Returns the raw line (no line ending) and its byte span.
-pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, Range<usize>)> {
+/// Succeeds (consuming nothing) when the cursor is at the start of a plain
+/// content line — not EOF, blank, a heading, a comment, or a new block.
+/// This is the shared precondition for `content_line` and the
+/// reference-continuation check in `finish_reference`.
+fn at_content_line(input: &mut Input<'_>) -> ModalResult<()> {
     (
         not(eof),
         not(blank_line),
@@ -36,7 +38,14 @@ pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, R
         not(comment_start),
         not(block_head),
     )
-        .parse_next(input)?;
+        .void()
+        .parse_next(input)
+}
+
+/// One continuation content line: not EOF, blank, a heading, a comment, or a
+/// new block. Returns the raw line (no line ending) and its byte span.
+pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, Range<usize>)> {
+    at_content_line.parse_next(input)?;
     let (line, span) = till_line_ending.with_span().parse_next(input)?;
     opt(line_ending).parse_next(input)?;
     Ok((line, span))
@@ -65,31 +74,20 @@ pub(crate) fn definition_body(input: &mut Input<'_>) -> ModalResult<(String, usi
     Ok((text, end))
 }
 
-/// Succeeds (consuming nothing) when the cursor is at a plain-text line — one
-/// that is not EOF, blank, a heading, a comment, or a new block.
-fn plain_text_line(input: &mut Input<'_>) -> ModalResult<()> {
-    (
-        not(eof),
-        not(blank_line),
-        not(heading_marker),
-        not(comment_start),
-        not(block_head),
-    )
-        .void()
-        .parse_next(input)
-}
-
 /// Called right after a reference's closing bracket and `inline_ws`. Allows an
 /// optional trailing line comment, then requires end-of-line/EOF, then forbids
 /// a plain-text continuation line. Emits a hard `cut_err` at the offending text.
 pub(crate) fn finish_reference(input: &mut Input<'_>) -> ModalResult<()> {
     opt(("//", till_line_ending).void()).parse_next(input)?;
+    // No free text may follow the closing bracket on the same line.
     cut_err(
-        alt((line_ending.void(), eof.void()))
-            .context(StrContext::Label("end of reference line (text is not allowed after a reference)")),
+        alt((line_ending.void(), eof.void())).context(StrContext::Label(
+            "end of reference line (text is not allowed after a reference)",
+        )),
     )
     .parse_next(input)?;
-    cut_err(not(plain_text_line).context(StrContext::Label("text content after a reference")))
+    // A reference also cannot be continued by a plain-text line on the next line.
+    cut_err(not(at_content_line).context(StrContext::Label("text content after a reference")))
         .parse_next(input)?;
     Ok(())
 }

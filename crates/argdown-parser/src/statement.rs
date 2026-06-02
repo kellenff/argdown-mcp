@@ -28,7 +28,10 @@ fn bracketed_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
             title: Some(title),
             text,
             is_reference: false,
-            span: Span { start: span.start, end },
+            span: Span {
+                start: span.start,
+                end,
+            },
         })
     } else {
         inline_ws.parse_next(input)?;
@@ -53,7 +56,13 @@ fn statement_title(input: &mut Input<'_>) -> ModalResult<(String, Range<usize>)>
 
 /// A plain statement: one or more content lines of free text, normalized.
 fn plain_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
-    (not(eof), not(blank_line), not(heading_marker), not(comment_start)).parse_next(input)?;
+    (
+        not(eof),
+        not(blank_line),
+        not(heading_marker),
+        not(comment_start),
+    )
+        .parse_next(input)?;
     let (first, first_span) = till_line_ending.with_span().parse_next(input)?;
     opt(line_ending).parse_next(input)?;
     let rest: Vec<(&str, Range<usize>)> = repeat(0.., content_line).parse_next(input)?;
