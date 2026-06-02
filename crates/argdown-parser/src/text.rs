@@ -26,6 +26,22 @@ pub(crate) fn block_head(input: &mut Input<'_>) -> ModalResult<()> {
         .parse_next(input)
 }
 
+/// Match a line that begins (after indentation) with a relation operator: its
+/// first non-space char is `+`, `-`, `_`, or `>`, or `<` followed by `+`/`-`/`_`.
+/// Lets a continuation line (and `finish_reference`) stop before a following
+/// relation line instead of swallowing it as text.
+pub(crate) fn relation_marker(input: &mut Input<'_>) -> ModalResult<()> {
+    (
+        take_while(0.., [' ', '\t']),
+        alt((
+            one_of(['+', '-', '_', '>']).void(),
+            ('<', one_of(['+', '-', '_'])).void(),
+        )),
+    )
+        .void()
+        .parse_next(input)
+}
+
 /// Succeeds (consuming nothing) when the cursor is at the start of a plain
 /// content line — not EOF, blank, a heading, a comment, or a new block.
 /// This is the shared precondition for `content_line` and the
@@ -37,6 +53,7 @@ fn at_content_line(input: &mut Input<'_>) -> ModalResult<()> {
         not(heading_marker),
         not(comment_start),
         not(block_head),
+        not(relation_marker),
     )
         .void()
         .parse_next(input)

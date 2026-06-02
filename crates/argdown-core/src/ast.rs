@@ -30,6 +30,7 @@ pub enum Block {
     Heading(Heading),
     Statement(Statement),
     Argument(Argument),
+    Relation(Relation),
 }
 
 /// An ATX heading (`#`–`######`).
@@ -56,6 +57,47 @@ pub struct Argument {
     pub description: String,
     pub is_reference: bool,
     pub span: Span,
+}
+
+/// A relation line (`+`, `<+`, `+>`, `-`, `<-`, `->`, `_`, `<_`, `_>`, `><`)
+/// and its target. The parser emits relations flat, in source order, tagged
+/// with raw indentation; assembling the parent/child tree is Layer B's job.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Relation {
+    /// Count of leading whitespace chars before the operator.
+    pub indent: usize,
+    pub operator: RelationOperator,
+    pub direction: RelationDirection,
+    pub target: RelationTarget,
+    /// Operator start → target end (excludes the indent).
+    pub span: Span,
+}
+
+/// The kind of dialectical relation, with the `+`≡`<+` family collapsed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationOperator {
+    Support,
+    Attack,
+    Undercut,
+    Contradictory,
+}
+
+/// Direction relative to the implicit parent element (the less-indented line
+/// above). `Inbound` = the relation points from the target to the parent
+/// (`+`, `<+`, etc.). `Outbound` = from the parent to the target (`+>`, `->`,
+/// `_>`). `Bidirectional` = `><`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationDirection {
+    Inbound,
+    Outbound,
+    Bidirectional,
+}
+
+/// A relation's target: a statement or an argument, reusing those forms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationTarget {
+    Statement(Statement),
+    Argument(Argument),
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@
 
 mod argument;
 mod heading;
+mod relation;
 mod statement;
 mod text;
 mod trivia;
@@ -18,6 +19,7 @@ use winnow::stream::LocatingSlice;
 
 use argument::argument;
 use heading::heading;
+use relation::relation;
 use statement::statement;
 use trivia::skip_trivia;
 
@@ -41,6 +43,7 @@ fn document(input: &mut Input<'_>) -> ModalResult<Document> {
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
     alt((
         heading.map(Block::Heading),
+        relation.map(Block::Relation),
         argument.map(Block::Argument),
         statement.map(Block::Statement),
     ))
@@ -50,7 +53,10 @@ fn block(input: &mut Input<'_>) -> ModalResult<Block> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use argdown_core::{Argument, Heading, Span, Statement};
+    use argdown_core::{
+        Argument, Heading, Relation, RelationDirection, RelationOperator, RelationTarget, Span,
+        Statement,
+    };
 
     #[test]
     fn parse_empty_input_yields_empty_document() {
@@ -320,5 +326,165 @@ mod tests {
     fn text_after_argument_reference_is_an_error() {
         assert_eq!(parse("<A> words").unwrap_err().offset, 4);
         assert_eq!(parse("<A>\nwords").unwrap_err().offset, 4);
+    }
+
+    /// Extract the single relation a source parses to, panicking otherwise.
+    fn only_relation(src: &str) -> Relation {
+        match parse(src).unwrap().blocks.as_slice() {
+            [Block::Relation(r)] => r.clone(),
+            other => panic!("{src:?} did not parse as a single relation: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn operator_tokens_map_to_operator_and_direction() {
+        use RelationDirection::{Bidirectional, Inbound, Outbound};
+        use RelationOperator::{Attack, Contradictory, Support, Undercut};
+        let cases = [
+            ("+ [B]", Support, Inbound),
+            ("<+ [B]", Support, Inbound),
+            ("+> [B]", Support, Outbound),
+            ("- [B]", Attack, Inbound),
+            ("<- [B]", Attack, Inbound),
+            ("-> [B]", Attack, Outbound),
+            ("_ [B]", Undercut, Inbound),
+            ("<_ [B]", Undercut, Inbound),
+            ("_> [B]", Undercut, Outbound),
+            (">< [B]", Contradictory, Bidirectional),
+        ];
+        for (src, operator, direction) in cases {
+            let r = only_relation(src);
+            assert_eq!(r.operator, operator, "operator for {src:?}");
+            assert_eq!(r.direction, direction, "direction for {src:?}");
+        }
+    }
+
+    #[test]
+    fn relation_under_a_reference_is_not_text_after_reference() {
+        let blocks = parse("[A]\n  + [B]").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+        assert!(
+            matches!(&blocks[0], Block::Statement(s) if s.is_reference && s.title.as_deref() == Some("A"))
+        );
+        assert!(matches!(&blocks[1], Block::Relation(r) if r.indent == 2));
+    }
+
+    #[test]
+    fn indentation_is_captured_as_leading_whitespace_count() {
+        assert_eq!(only_relation("  + [B]").indent, 2);
+        assert_eq!(only_relation("    - [C]").indent, 4);
+    }
+
+    #[test]
+    fn support_relation_to_statement_reference() {
+        assert_eq!(
+            parse("+ [B]").unwrap().blocks,
+            vec![Block::Relation(Relation {
+                indent: 0,
+                operator: RelationOperator::Support,
+                direction: RelationDirection::Inbound,
+                target: RelationTarget::Statement(Statement {
+                    title: Some("B".to_string()),
+                    text: String::new(),
+                    is_reference: true,
+                    span: Span { start: 2, end: 5 },
+                }),
+                span: Span { start: 0, end: 5 },
+            })]
+        );
+    }
+
+    #[test]
+    fn nested_relations_are_flat_in_source_order_with_depth() {
+        let blocks = parse("[A]\n  + [B]\n    - [C]\n  + [D]").unwrap().blocks;
+        assert_eq!(blocks.len(), 4);
+        assert!(matches!(&blocks[0], Block::Statement(s) if s.title.as_deref() == Some("A")));
+
+        let expected = [
+            (2, RelationOperator::Support, "B"),
+            (4, RelationOperator::Attack, "C"),
+            (2, RelationOperator::Support, "D"),
+        ];
+        for (block, (indent, operator, title)) in blocks[1..].iter().zip(expected) {
+            let Block::Relation(r) = block else {
+                panic!("expected a relation, got {block:?}");
+            };
+            assert_eq!(r.indent, indent);
+            assert_eq!(r.operator, operator);
+            assert_eq!(r.direction, RelationDirection::Inbound);
+            match &r.target {
+                RelationTarget::Statement(s) => assert_eq!(s.title.as_deref(), Some(title)),
+                other => panic!("expected a statement target, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn relation_target_is_a_statement_definition() {
+        let r = only_relation("+ [B]: x");
+        match r.target {
+            RelationTarget::Statement(s) => {
+                assert_eq!(s.title.as_deref(), Some("B"));
+                assert_eq!(s.text, "x");
+                assert!(!s.is_reference);
+            }
+            other => panic!("expected a statement target, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn relation_target_is_a_plain_statement() {
+        let r = only_relation("+ claim");
+        match r.target {
+            RelationTarget::Statement(s) => {
+                assert_eq!(s.title, None);
+                assert_eq!(s.text, "claim");
+            }
+            other => panic!("expected a statement target, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn relation_target_is_an_argument_reference() {
+        let r = only_relation("+ <Arg>");
+        match r.target {
+            RelationTarget::Argument(a) => {
+                assert_eq!(a.title, "Arg");
+                assert!(a.is_reference);
+            }
+            other => panic!("expected an argument target, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn relation_target_is_an_argument_definition() {
+        let r = only_relation("+ <Arg>: desc");
+        match r.target {
+            RelationTarget::Argument(a) => {
+                assert_eq!(a.title, "Arg");
+                assert_eq!(a.description, "desc");
+                assert!(!a.is_reference);
+            }
+            other => panic!("expected an argument target, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn multi_line_relation_target_is_normalized() {
+        let r = only_relation("+ [B]: one\n    two");
+        match r.target {
+            RelationTarget::Statement(s) => assert_eq!(s.text, "one two"),
+            other => panic!("expected a statement target, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn text_after_a_relation_target_reference_is_an_error() {
+        assert!(parse("+ [B] extra").is_err());
+    }
+
+    #[test]
+    fn relation_operator_without_a_target_is_an_error() {
+        assert!(parse("+ ").is_err());
     }
 }
