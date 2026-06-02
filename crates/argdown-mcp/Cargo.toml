@@ -1,0 +1,8 @@
+[package]
+name = "argdown-mcp"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argdown-core = { workspace = true }
+argdown-parser = { workspace = true }
