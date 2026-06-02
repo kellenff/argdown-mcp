@@ -8,11 +8,22 @@ use winnow::token::{one_of, take_until, take_while};
 
 use crate::Input;
 
-/// Skip inter-block trivia: runs of whitespace, line breaks, and comments.
+/// Skip inter-block trivia, line by line: blank lines and comment lines (each
+/// possibly indented) and bare line endings are consumed whole, but the leading
+/// indent of a content-bearing line is left for the block parser to measure.
+///
+/// A content line makes both branches fail at/after the leading whitespace, and
+/// `alt` backtracks (restoring the consumed indent), so the cursor rests at
+/// column 0 of that line. Top-level elements sit at indent 0, so heading,
+/// statement, and argument parsing are unchanged; `relation` measures the
+/// indent it needs.
 pub(crate) fn skip_trivia(input: &mut Input<'_>) -> ModalResult<()> {
     let _: () = repeat(
         0..,
-        alt((take_while(1.., [' ', '\t', '\r', '\n']).void(), comment)),
+        alt((
+            (take_while(0.., [' ', '\t']), line_ending).void(),
+            (take_while(0.., [' ', '\t']), comment).void(),
+        )),
     )
     .parse_next(input)?;
     Ok(())
