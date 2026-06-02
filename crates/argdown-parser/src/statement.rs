@@ -1,4 +1,4 @@
-//! Plain and titled statements, possibly spanning multiple wrapped lines.
+//! Statements: plain text, titled definitions (`[T]: x`), and references (`[T]`).
 
 use std::ops::Range;
 
@@ -6,68 +6,66 @@ use argdown_core::{Span, Statement};
 use winnow::ModalResult;
 use winnow::Parser;
 use winnow::ascii::{line_ending, till_line_ending};
-use winnow::combinator::{eof, not, opt, repeat};
+use winnow::combinator::{alt, delimited, eof, not, opt, repeat};
+use winnow::token::take_till;
 
 use crate::Input;
-use crate::trivia::{blank_line, comment_start, heading_marker, strip_trailing_line_comment};
+use crate::text::{content_line, definition_body, finish_reference, inline_ws, normalize_lines};
+use crate::trivia::{blank_line, comment_start, heading_marker};
 
-/// Parse one statement: one or more consecutive content lines, normalized.
+/// Parse one statement: a bracketed definition/reference, or plain text.
 pub(crate) fn statement(input: &mut Input<'_>) -> ModalResult<Statement> {
-    let lines: Vec<(&str, Range<usize>)> = repeat(1.., content_line).parse_next(input)?;
-    let start = lines.first().expect("repeat(1..) yields >= 1 line").1.start;
-    let end = lines.last().expect("repeat(1..) yields >= 1 line").1.end;
-
-    let cleaned: Vec<&str> = lines
-        .iter()
-        .map(|(line, _)| strip_trailing_line_comment(line))
-        .collect();
-
-    let (title, first_rest) = split_title(cleaned[0]);
-
-    let mut parts: Vec<&str> = Vec::new();
-    let first = first_rest.trim();
-    if !first.is_empty() {
-        parts.push(first);
-    }
-    for line in &cleaned[1..] {
-        let trimmed = line.trim();
-        if !trimmed.is_empty() {
-            parts.push(trimmed);
-        }
-    }
-
-    Ok(Statement {
-        title,
-        text: parts.join(" "),
-        is_reference: false,
-        span: Span { start, end },
-    })
+    alt((bracketed_statement, plain_statement)).parse_next(input)
 }
 
-/// One content line: not EOF, not blank, not a heading. Returns the raw line
-/// (without its line ending) and the byte span of that text.
-fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, Range<usize>)> {
-    (
-        not(eof),
-        not(blank_line),
-        not(heading_marker),
-        not(comment_start),
-    )
-        .parse_next(input)?;
-    let (line, span) = till_line_ending.with_span().parse_next(input)?;
+/// `[Title]: text` (definition) or `[Title]` (reference). Once `[Title]` is
+/// consumed the branch is committed, so trailing text is a hard error.
+fn bracketed_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
+    let (title, span) = statement_title.parse_next(input)?;
+    if opt(':').parse_next(input)?.is_some() {
+        let (text, end) = definition_body(input)?;
+        Ok(Statement {
+            title: Some(title),
+            text,
+            is_reference: false,
+            span: Span { start: span.start, end },
+        })
+    } else {
+        inline_ws.parse_next(input)?;
+        finish_reference(input)?;
+        Ok(Statement {
+            title: Some(title),
+            text: String::new(),
+            is_reference: true,
+            span: span.into(),
+        })
+    }
+}
+
+/// `[ title ]` — title trimmed; fails (backtracks) if there is no closing `]`
+/// on the same line, so malformed brackets fall through to plain text.
+fn statement_title(input: &mut Input<'_>) -> ModalResult<(String, Range<usize>)> {
+    delimited('[', take_till(0.., (']', '\r', '\n')), ']')
+        .map(|title: &str| title.trim().to_string())
+        .with_span()
+        .parse_next(input)
+}
+
+/// A plain statement: one or more content lines of free text, normalized.
+fn plain_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
+    (not(eof), not(blank_line), not(heading_marker), not(comment_start)).parse_next(input)?;
+    let (first, first_span) = till_line_ending.with_span().parse_next(input)?;
     opt(line_ending).parse_next(input)?;
-    Ok((line, span))
-}
-
-/// Split a leading `[Title]:` off a line. A bare `[…]` without `]:` is plain
-/// text (statement references arrive in increment A2).
-fn split_title(line: &str) -> (Option<String>, &str) {
-    let trimmed = line.trim_start();
-    if let Some(rest) = trimmed.strip_prefix('[')
-        && let Some(close) = rest.find("]:")
-    {
-        let title = rest[..close].trim().to_string();
-        return (Some(title), &rest[close + 2..]);
-    }
-    (None, line)
+    let rest: Vec<(&str, Range<usize>)> = repeat(0.., content_line).parse_next(input)?;
+    let end = rest.last().map_or(first_span.end, |(_, span)| span.end);
+    let text = normalize_lines(std::iter::once(first).chain(rest.iter().map(|(line, _)| *line)));
+    Ok(Statement {
+        title: None,
+        text,
+        is_reference: false,
+        span: Span {
+            start: first_span.start,
+            end,
+        },
+    })
 }

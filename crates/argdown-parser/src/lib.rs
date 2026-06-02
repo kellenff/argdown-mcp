@@ -5,6 +5,7 @@
 
 mod heading;
 mod statement;
+mod text;
 mod trivia;
 
 use argdown_core::{Block, Document, Error};
@@ -113,16 +114,54 @@ mod tests {
     }
 
     #[test]
-    fn bare_bracket_without_colon_is_plain_text() {
+    fn text_after_statement_reference_is_an_error() {
+        // `[Foo] is text` — what A1 treated as plain text is now an error.
+        let err = parse("[Foo] is text").unwrap_err();
+        assert_eq!(err.offset, 6);
+    }
+
+    #[test]
+    fn statement_reference() {
         assert_eq!(
-            parse("[Foo] is text").unwrap().blocks,
+            parse("[S]").unwrap().blocks,
             vec![Block::Statement(Statement {
-                title: None,
-                text: "[Foo] is text".to_string(),
-                is_reference: false,
-                span: Span { start: 0, end: 13 },
+                title: Some("S".to_string()),
+                text: String::new(),
+                is_reference: true,
+                span: Span { start: 0, end: 3 },
             })]
         );
+    }
+
+    #[test]
+    fn statement_definition_still_parses() {
+        assert_eq!(
+            parse("[S]: text").unwrap().blocks,
+            vec![Block::Statement(Statement {
+                title: Some("S".to_string()),
+                text: "text".to_string(),
+                is_reference: false,
+                span: Span { start: 0, end: 9 },
+            })]
+        );
+    }
+
+    #[test]
+    fn two_references_on_adjacent_lines() {
+        let blocks = parse("[A]\n[B]").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+        assert!(matches!(&blocks[0], Block::Statement(s) if s.is_reference));
+        assert!(matches!(&blocks[1], Block::Statement(s) if s.is_reference));
+    }
+
+    #[test]
+    fn text_after_reference_same_line_offset() {
+        assert_eq!(parse("[S] words").unwrap_err().offset, 4);
+    }
+
+    #[test]
+    fn text_after_reference_next_line_offset() {
+        assert_eq!(parse("[S]\nwords").unwrap_err().offset, 4);
     }
 
     #[test]
