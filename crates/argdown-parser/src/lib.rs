@@ -213,4 +213,16 @@ mod tests {
             })]
         );
     }
+
+    #[test]
+    fn unterminated_block_comment_errors_at_opener() {
+        let err = parse("/* oops").unwrap_err();
+        assert_eq!(err.offset, 0);
+    }
+
+    #[test]
+    fn error_offset_points_past_earlier_blocks() {
+        let err = parse("foo\n/* x").unwrap_err();
+        assert_eq!(err.offset, 4);
+    }
 }
