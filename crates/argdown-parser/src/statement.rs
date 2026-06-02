@@ -39,6 +39,7 @@ pub(crate) fn statement(input: &mut Input<'_>) -> ModalResult<Statement> {
     Ok(Statement {
         title,
         text: parts.join(" "),
+        is_reference: false,
         span: Span { start, end },
     })
 }

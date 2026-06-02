@@ -56,6 +56,7 @@ mod tests {
                 blocks: vec![Block::Statement(Statement {
                     title: None,
                     text: "Hello world.".to_string(),
+                    is_reference: false,
                     span: Span { start: 0, end: 12 },
                 })],
             })
@@ -70,6 +71,7 @@ mod tests {
                 blocks: vec![Block::Statement(Statement {
                     title: Some("Key".to_string()),
                     text: "Some text".to_string(),
+                    is_reference: false,
                     span: Span { start: 0, end: 16 },
                 })],
             })
@@ -84,6 +86,7 @@ mod tests {
                 blocks: vec![Block::Statement(Statement {
                     title: None,
                     text: "Line one line two".to_string(),
+                    is_reference: false,
                     span: Span { start: 0, end: 17 },
                 })],
             })
@@ -103,6 +106,7 @@ mod tests {
             vec![Block::Statement(Statement {
                 title: None,
                 text: "a b".to_string(),
+                is_reference: false,
                 span: Span { start: 0, end: 4 },
             })]
         );
@@ -115,6 +119,7 @@ mod tests {
             vec![Block::Statement(Statement {
                 title: None,
                 text: "[Foo] is text".to_string(),
+                is_reference: false,
                 span: Span { start: 0, end: 13 },
             })]
         );
@@ -168,6 +173,7 @@ mod tests {
             vec![Block::Statement(Statement {
                 title: None,
                 text: "#nospace".to_string(),
+                is_reference: false,
                 span: Span { start: 0, end: 8 },
             })]
         );
@@ -186,6 +192,7 @@ mod tests {
             vec![Block::Statement(Statement {
                 title: None,
                 text: "foo".to_string(),
+                is_reference: false,
                 span: Span { start: 0, end: 10 },
             })]
         );
@@ -205,6 +212,7 @@ mod tests {
             vec![Block::Statement(Statement {
                 title: None,
                 text: "b".to_string(),
+                is_reference: false,
                 span: Span { start: 11, end: 12 },
             })]
         );

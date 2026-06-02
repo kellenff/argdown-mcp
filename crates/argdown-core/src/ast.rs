@@ -39,11 +39,12 @@ pub struct Heading {
     pub span: Span,
 }
 
-/// A statement, optionally titled (`[Title]: text`).
+/// A statement: plain text, a titled definition (`[T]: x`), or a reference (`[T]`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Statement {
     pub title: Option<String>,
     pub text: String,
+    pub is_reference: bool,
     pub span: Span,
 }
 
