@@ -1,17 +1,33 @@
-//! Whitespace, blank lines, heading-marker detection, and comment helpers.
+//! Whitespace, blank lines, heading-marker detection, and comments.
 
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::ascii::line_ending;
-use winnow::token::{one_of, take_while};
+use winnow::ascii::{line_ending, till_line_ending};
+use winnow::combinator::{alt, repeat};
+use winnow::token::{one_of, take_until, take_while};
 
 use crate::Input;
 
-/// Skip inter-block trivia: runs of whitespace and line breaks.
+/// Skip inter-block trivia: runs of whitespace, line breaks, and comments.
 pub(crate) fn skip_trivia(input: &mut Input<'_>) -> ModalResult<()> {
-    take_while(0.., [' ', '\t', '\r', '\n'])
-        .void()
-        .parse_next(input)
+    let _: () = repeat(
+        0..,
+        alt((take_while(1.., [' ', '\t', '\r', '\n']).void(), comment)),
+    )
+    .parse_next(input)?;
+    Ok(())
+}
+
+/// Consume one comment: line (`// …`), block (`/* … */`), or HTML
+/// (`<!-- … -->`). Block and HTML forms may span multiple lines. Fails (with
+/// the cursor at the opener) if a block/HTML comment is never closed.
+pub(crate) fn comment(input: &mut Input<'_>) -> ModalResult<()> {
+    alt((
+        ("//", till_line_ending).void(),
+        ("/*", take_until(0.., "*/"), "*/").void(),
+        ("<!--", take_until(0.., "-->"), "-->").void(),
+    ))
+    .parse_next(input)
 }
 
 /// Match a blank line (only whitespace, then a line ending).
@@ -24,6 +40,14 @@ pub(crate) fn blank_line(input: &mut Input<'_>) -> ModalResult<()> {
 /// Match the start of an ATX heading: 1–6 `#` followed by a space or tab.
 pub(crate) fn heading_marker(input: &mut Input<'_>) -> ModalResult<()> {
     (take_while(1..=6, '#'), one_of([' ', '\t']))
+        .void()
+        .parse_next(input)
+}
+
+/// Match the start of a comment at the beginning of a line (after optional
+/// indentation).
+pub(crate) fn comment_start(input: &mut Input<'_>) -> ModalResult<()> {
+    (take_while(0.., [' ', '\t']), alt(("//", "/*", "<!--")))
         .void()
         .parse_next(input)
 }

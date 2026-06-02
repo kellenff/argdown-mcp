@@ -9,7 +9,7 @@ use winnow::ascii::{line_ending, till_line_ending};
 use winnow::combinator::{eof, not, opt, repeat};
 
 use crate::Input;
-use crate::trivia::{blank_line, heading_marker, strip_trailing_line_comment};
+use crate::trivia::{blank_line, comment_start, heading_marker, strip_trailing_line_comment};
 
 /// Parse one statement: one or more consecutive content lines, normalized.
 pub(crate) fn statement(input: &mut Input<'_>) -> ModalResult<Statement> {
@@ -46,7 +46,7 @@ pub(crate) fn statement(input: &mut Input<'_>) -> ModalResult<Statement> {
 /// One content line: not EOF, not blank, not a heading. Returns the raw line
 /// (without its line ending) and the byte span of that text.
 fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, Range<usize>)> {
-    (not(eof), not(blank_line), not(heading_marker)).parse_next(input)?;
+    (not(eof), not(blank_line), not(heading_marker), not(comment_start)).parse_next(input)?;
     let (line, span) = till_line_ending.with_span().parse_next(input)?;
     opt(line_ending).parse_next(input)?;
     Ok((line, span))

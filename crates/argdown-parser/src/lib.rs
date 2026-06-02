@@ -176,4 +176,41 @@ mod tests {
             })]
         );
     }
+
+    #[test]
+    fn line_comment_between_statements_is_skipped() {
+        let blocks = parse("a\n// note\nb").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+    }
+
+    #[test]
+    fn trailing_line_comment_is_stripped() {
+        assert_eq!(
+            parse("foo // bar").unwrap().blocks,
+            vec![Block::Statement(Statement {
+                title: None,
+                text: "foo".to_string(),
+                span: Span { start: 0, end: 10 },
+            })]
+        );
+    }
+
+    #[test]
+    fn block_comment_spanning_lines_is_skipped() {
+        let blocks = parse("a\n/* x\ny */\nb").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+    }
+
+    #[test]
+    fn html_comment_is_skipped() {
+        let blocks = parse("<!-- c -->\nb").unwrap().blocks;
+        assert_eq!(
+            blocks,
+            vec![Block::Statement(Statement {
+                title: None,
+                text: "b".to_string(),
+                span: Span { start: 11, end: 12 },
+            })]
+        );
+    }
 }
