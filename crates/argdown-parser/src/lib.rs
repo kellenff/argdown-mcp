@@ -35,11 +35,7 @@ fn document(input: &mut Input<'_>) -> ModalResult<Document> {
 }
 
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
-    alt((
-        heading.map(Block::Heading),
-        statement.map(Block::Statement),
-    ))
-    .parse_next(input)
+    alt((heading.map(Block::Heading), statement.map(Block::Statement))).parse_next(input)
 }
 
 #[cfg(test)]
