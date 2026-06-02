@@ -2,3 +2,6 @@
 
 # Serena MCP index cache (regenerated locally)
 /.serena/
+
+# M2 brain-jam transcripts (ideation scratch)
+/.brainstorm/
