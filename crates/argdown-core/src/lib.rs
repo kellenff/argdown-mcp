@@ -6,5 +6,5 @@
 mod ast;
 mod error;
 
-pub use ast::{Block, Document, Heading, Span, Statement};
+pub use ast::{Argument, Block, Document, Heading, Span, Statement};
 pub use error::Error;

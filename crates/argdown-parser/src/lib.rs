@@ -3,6 +3,7 @@
 //! Parses the document spine (headings, statements, comments) and statement
 //! references into an [`argdown_core::Document`]. Grows by increment.
 
+mod argument;
 mod heading;
 mod statement;
 mod text;
@@ -14,6 +15,7 @@ use winnow::Parser;
 use winnow::combinator::{alt, repeat, terminated};
 use winnow::stream::LocatingSlice;
 
+use argument::argument;
 use heading::heading;
 use statement::statement;
 use trivia::skip_trivia;
@@ -36,13 +38,18 @@ fn document(input: &mut Input<'_>) -> ModalResult<Document> {
 }
 
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
-    alt((heading.map(Block::Heading), statement.map(Block::Statement))).parse_next(input)
+    alt((
+        heading.map(Block::Heading),
+        argument.map(Block::Argument),
+        statement.map(Block::Statement),
+    ))
+    .parse_next(input)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use argdown_core::{Heading, Span, Statement};
+    use argdown_core::{Argument, Heading, Span, Statement};
 
     #[test]
     fn parse_empty_input_yields_empty_document() {
@@ -267,5 +274,50 @@ mod tests {
     fn error_offset_points_past_earlier_blocks() {
         let err = parse("foo\n/* x").unwrap_err();
         assert_eq!(err.offset, 4);
+    }
+
+    #[test]
+    fn argument_definition_single_line() {
+        assert_eq!(
+            parse("<A>: desc").unwrap().blocks,
+            vec![Block::Argument(Argument {
+                title: "A".to_string(),
+                description: "desc".to_string(),
+                is_reference: false,
+                span: Span { start: 0, end: 9 },
+            })]
+        );
+    }
+
+    #[test]
+    fn argument_definition_multi_line() {
+        assert_eq!(
+            parse("<A>: one\ntwo").unwrap().blocks,
+            vec![Block::Argument(Argument {
+                title: "A".to_string(),
+                description: "one two".to_string(),
+                is_reference: false,
+                span: Span { start: 0, end: 12 },
+            })]
+        );
+    }
+
+    #[test]
+    fn argument_reference() {
+        assert_eq!(
+            parse("<A>").unwrap().blocks,
+            vec![Block::Argument(Argument {
+                title: "A".to_string(),
+                description: String::new(),
+                is_reference: true,
+                span: Span { start: 0, end: 3 },
+            })]
+        );
+    }
+
+    #[test]
+    fn text_after_argument_reference_is_an_error() {
+        assert_eq!(parse("<A> words").unwrap_err().offset, 4);
+        assert_eq!(parse("<A>\nwords").unwrap_err().offset, 4);
     }
 }

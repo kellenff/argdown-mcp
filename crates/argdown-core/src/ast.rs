@@ -29,6 +29,7 @@ pub struct Document {
 pub enum Block {
     Heading(Heading),
     Statement(Statement),
+    Argument(Argument),
 }
 
 /// An ATX heading (`#`–`######`).
@@ -44,6 +45,15 @@ pub struct Heading {
 pub struct Statement {
     pub title: Option<String>,
     pub text: String,
+    pub is_reference: bool,
+    pub span: Span,
+}
+
+/// An argument: a titled definition (`<T>: desc`) or a reference (`<T>`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Argument {
+    pub title: String,
+    pub description: String,
     pub is_reference: bool,
     pub span: Span,
 }
