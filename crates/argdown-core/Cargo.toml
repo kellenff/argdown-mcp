@@ -1,0 +1,6 @@
+[package]
+name = "argdown-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
