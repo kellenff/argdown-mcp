@@ -1,0 +1,8 @@
+[package]
+name = "argdown-parser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argdown-core = { workspace = true }
+winnow = { workspace = true }

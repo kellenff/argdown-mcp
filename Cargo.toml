@@ -9,3 +9,4 @@ edition = "2024"
 [workspace.dependencies]
 winnow = "1"
 argdown-core = { path = "crates/argdown-core" }
+argdown-parser = { path = "crates/argdown-parser" }
