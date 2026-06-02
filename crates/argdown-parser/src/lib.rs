@@ -3,15 +3,17 @@
 //! Parses headings, plain and titled statements, and comments into an
 //! [`argdown_core::Document`]. See the A1 spine design spec.
 
+mod heading;
 mod statement;
 mod trivia;
 
 use argdown_core::{Block, Document, Error};
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::combinator::{repeat, terminated};
+use winnow::combinator::{alt, repeat, terminated};
 use winnow::stream::LocatingSlice;
 
+use heading::heading;
 use statement::statement;
 use trivia::skip_trivia;
 
@@ -33,13 +35,17 @@ fn document(input: &mut Input<'_>) -> ModalResult<Document> {
 }
 
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
-    statement.map(Block::Statement).parse_next(input)
+    alt((
+        heading.map(Block::Heading),
+        statement.map(Block::Statement),
+    ))
+    .parse_next(input)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use argdown_core::{Span, Statement};
+    use argdown_core::{Heading, Span, Statement};
 
     #[test]
     fn parse_empty_input_yields_empty_document() {
@@ -114,6 +120,59 @@ mod tests {
                 title: None,
                 text: "[Foo] is text".to_string(),
                 span: Span { start: 0, end: 13 },
+            })]
+        );
+    }
+
+    #[test]
+    fn heading_level_one() {
+        assert_eq!(
+            parse("# Title").unwrap().blocks,
+            vec![Block::Heading(Heading {
+                level: 1,
+                text: "Title".to_string(),
+                span: Span { start: 0, end: 7 },
+            })]
+        );
+    }
+
+    #[test]
+    fn heading_levels_two_through_six() {
+        for level in 2u8..=6 {
+            let hashes = "#".repeat(level as usize);
+            let source = format!("{hashes} Deep");
+            let blocks = parse(&source).unwrap().blocks;
+            assert_eq!(
+                blocks,
+                vec![Block::Heading(Heading {
+                    level,
+                    text: "Deep".to_string(),
+                    span: Span {
+                        start: 0,
+                        end: source.len(),
+                    },
+                })]
+            );
+        }
+    }
+
+    #[test]
+    fn heading_then_statement_without_blank_line() {
+        let blocks = parse("# Title\nbody").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+        assert!(matches!(blocks[0], Block::Heading(_)));
+        assert!(matches!(blocks[1], Block::Statement(_)));
+    }
+
+    #[test]
+    fn hash_without_space_is_a_statement() {
+        let blocks = parse("#nospace").unwrap().blocks;
+        assert_eq!(
+            blocks,
+            vec![Block::Statement(Statement {
+                title: None,
+                text: "#nospace".to_string(),
+                span: Span { start: 0, end: 8 },
             })]
         );
     }
