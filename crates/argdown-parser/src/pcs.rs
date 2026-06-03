@@ -11,6 +11,7 @@ use winnow::combinator::{alt, cut_err, delimited, eof, opt, peek, preceded};
 use winnow::token::{take_till, take_while};
 
 use crate::Input;
+use crate::relation::relation;
 use crate::statement::statement;
 use crate::text::inline_ws;
 
@@ -23,7 +24,7 @@ pub(crate) fn pcs(input: &mut Input<'_>) -> ModalResult<Pcs> {
     let start = item_span_start(&first);
     let mut items = vec![first];
     while let Some(item) =
-        opt(alt((numbered_statement_item, inference_item))).parse_next(input)?
+        opt(alt((numbered_statement_item, inference_item, relation_item))).parse_next(input)?
     {
         items.push(item);
     }
@@ -109,6 +110,11 @@ fn ruled_divider(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
             )
         })
         .parse_next(input)
+}
+
+/// An interspersed relation line, reusing the relation parser.
+fn relation_item(input: &mut Input<'_>) -> ModalResult<PcsItem> {
+    relation.map(PcsItem::Relation).parse_next(input)
 }
 
 fn item_span_start(item: &PcsItem) -> usize {
