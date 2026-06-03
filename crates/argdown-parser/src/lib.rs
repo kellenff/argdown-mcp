@@ -76,6 +76,7 @@ mod tests {
                     text: "Hello world.".to_string(),
                     is_reference: false,
                     span: Span { start: 0, end: 12 },
+                    inlines: vec![],
                 })],
             })
         );
@@ -91,6 +92,7 @@ mod tests {
                     text: "Some text".to_string(),
                     is_reference: false,
                     span: Span { start: 0, end: 16 },
+                    inlines: vec![],
                 })],
             })
         );
@@ -106,6 +108,7 @@ mod tests {
                     text: "Line one line two".to_string(),
                     is_reference: false,
                     span: Span { start: 0, end: 17 },
+                    inlines: vec![],
                 })],
             })
         );
@@ -126,6 +129,7 @@ mod tests {
                 text: "a b".to_string(),
                 is_reference: false,
                 span: Span { start: 0, end: 4 },
+                inlines: vec![],
             })]
         );
     }
@@ -146,6 +150,7 @@ mod tests {
                 text: String::new(),
                 is_reference: true,
                 span: Span { start: 0, end: 3 },
+                inlines: vec![],
             })]
         );
     }
@@ -159,6 +164,7 @@ mod tests {
                 text: "text".to_string(),
                 is_reference: false,
                 span: Span { start: 0, end: 9 },
+                inlines: vec![],
             })]
         );
     }
@@ -231,6 +237,7 @@ mod tests {
                 text: "#nospace".to_string(),
                 is_reference: false,
                 span: Span { start: 0, end: 8 },
+                inlines: vec![],
             })]
         );
     }
@@ -250,6 +257,7 @@ mod tests {
                 text: "foo".to_string(),
                 is_reference: false,
                 span: Span { start: 0, end: 10 },
+                inlines: vec![],
             })]
         );
     }
@@ -270,6 +278,7 @@ mod tests {
                 text: "b".to_string(),
                 is_reference: false,
                 span: Span { start: 11, end: 12 },
+                inlines: vec![],
             })]
         );
     }
@@ -295,6 +304,7 @@ mod tests {
                 description: "desc".to_string(),
                 is_reference: false,
                 span: Span { start: 0, end: 9 },
+                inlines: vec![],
             })]
         );
     }
@@ -308,6 +318,7 @@ mod tests {
                 description: "one two".to_string(),
                 is_reference: false,
                 span: Span { start: 0, end: 12 },
+                inlines: vec![],
             })]
         );
     }
@@ -321,6 +332,7 @@ mod tests {
                 description: String::new(),
                 is_reference: true,
                 span: Span { start: 0, end: 3 },
+                inlines: vec![],
             })]
         );
     }
@@ -391,6 +403,7 @@ mod tests {
                     text: String::new(),
                     is_reference: true,
                     span: Span { start: 2, end: 5 },
+                    inlines: vec![],
                 }),
                 span: Span { start: 0, end: 5 },
             })]
