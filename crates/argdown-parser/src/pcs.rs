@@ -23,8 +23,12 @@ pub(crate) fn pcs(input: &mut Input<'_>) -> ModalResult<Pcs> {
     let first = numbered_statement_item(input)?;
     let start = item_span_start(&first);
     let mut items = vec![first];
-    while let Some(item) =
-        opt(alt((numbered_statement_item, inference_item, relation_item))).parse_next(input)?
+    while let Some(item) = opt(alt((
+        numbered_statement_item,
+        inference_item,
+        relation_item,
+    )))
+    .parse_next(input)?
     {
         items.push(item);
     }
