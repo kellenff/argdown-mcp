@@ -3,15 +3,17 @@
 
 use std::ops::Range;
 
+use argdown_core::Inline;
 use winnow::ModalResult;
 use winnow::Parser;
 use winnow::ascii::{digit1, line_ending, till_line_ending};
 use winnow::combinator::{alt, cut_err, eof, not, opt, repeat};
-use winnow::error::StrContext;
+use winnow::error::{ContextError, ErrMode, StrContext};
 use winnow::token::{one_of, take_while};
 
 use crate::Input;
-use crate::trivia::{blank_line, comment_start, heading_marker, strip_trailing_line_comment};
+use crate::inline::scan_line;
+use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Consume run of spaces and tabs (no line breaks).
 pub(crate) fn inline_ws(input: &mut Input<'_>) -> ModalResult<()> {
@@ -78,11 +80,27 @@ pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, R
     Ok((line, span))
 }
 
-/// Strip trailing line comments, trim, drop empties, join with a single space.
-pub(crate) fn normalize_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> String {
+/// Scan one raw body line (`text`, absolute start `base`); append its inlines to
+/// `out` and return the comment-stripped content slice for normalization.
+pub(crate) fn body_line<'s>(
+    text: &'s str,
+    base: usize,
+    out: &mut Vec<Inline>,
+) -> ModalResult<&'s str> {
+    match scan_line(text, base) {
+        Ok((mut inlines, content_len)) => {
+            out.append(&mut inlines);
+            Ok(&text[..content_len])
+        }
+        Err(_) => Err(ErrMode::Cut(ContextError::new())),
+    }
+}
+
+/// Trim each content slice, drop empties, join with a single space.
+pub(crate) fn normalize_contents<'a>(contents: impl IntoIterator<Item = &'a str>) -> String {
     let mut parts: Vec<&'a str> = Vec::new();
-    for line in lines {
-        let trimmed = strip_trailing_line_comment(line).trim();
+    for c in contents {
+        let trimmed = c.trim();
         if !trimmed.is_empty() {
             parts.push(trimmed);
         }
@@ -90,15 +108,22 @@ pub(crate) fn normalize_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> S
     parts.join(" ")
 }
 
-/// Read a definition body: the remainder of the current line plus continuation
-/// content lines. Returns the normalized text and the body's end byte offset.
-pub(crate) fn definition_body(input: &mut Input<'_>) -> ModalResult<(String, usize)> {
+/// Read a definition body: remainder of the current line plus continuation
+/// lines. Returns the normalized text, the body's end offset, and the inlines.
+pub(crate) fn definition_body(input: &mut Input<'_>) -> ModalResult<(String, usize, Vec<Inline>)> {
     let (first, first_span) = till_line_ending.with_span().parse_next(input)?;
     opt(line_ending).parse_next(input)?;
     let rest: Vec<(&str, Range<usize>)> = repeat(0.., content_line).parse_next(input)?;
     let end = rest.last().map_or(first_span.end, |(_, span)| span.end);
-    let text = normalize_lines(std::iter::once(first).chain(rest.iter().map(|(line, _)| *line)));
-    Ok((text, end))
+
+    let mut inlines = Vec::new();
+    let mut contents: Vec<&str> = Vec::new();
+    contents.push(body_line(first, first_span.start, &mut inlines)?);
+    for (line, span) in &rest {
+        contents.push(body_line(line, span.start, &mut inlines)?);
+    }
+    let text = normalize_contents(contents);
+    Ok((text, end, inlines))
 }
 
 /// Called right after a reference's closing bracket and `inline_ws`. Allows an

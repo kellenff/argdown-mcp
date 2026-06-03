@@ -16,7 +16,7 @@ use crate::text::{definition_body, finish_reference, inline_ws};
 pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
     let (title, span) = argument_title.parse_next(input)?;
     if opt(':').parse_next(input)?.is_some() {
-        let (description, end) = definition_body(input)?;
+        let (description, end, inlines) = definition_body(input)?;
         Ok(Argument {
             title,
             description,
@@ -25,7 +25,7 @@ pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
                 start: span.start,
                 end,
             },
-            inlines: vec![],
+            inlines,
         })
     } else {
         inline_ws.parse_next(input)?;
