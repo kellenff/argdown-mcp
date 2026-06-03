@@ -581,6 +581,25 @@ mod tests {
     }
 
     #[test]
+    fn pcs_interspersed_child_relation() {
+        let pcs = only_pcs("(1) a\n  +> [X]\n----\n(2) b");
+        assert_eq!(pcs.items.len(), 4);
+        match &pcs.items[1] {
+            PcsItem::Relation(relation) => {
+                assert_eq!(relation.indent, 2);
+                assert_eq!(relation.operator, RelationOperator::Support);
+                assert_eq!(relation.direction, RelationDirection::Outbound);
+                match &relation.target {
+                    RelationTarget::Statement(s) => assert_eq!(s.title.as_deref(), Some("X")),
+                    other => panic!("expected a statement target, got {other:?}"),
+                }
+            }
+            other => panic!("expected a relation item at index 1, got {other:?}"),
+        }
+        assert!(matches!(&pcs.items[2], PcsItem::Inference { .. }));
+    }
+
+    #[test]
     fn pcs_multi_step_interleaved() {
         // premises -> bare inference -> intermediary -> premise -> ruled inference -> main
         let pcs = only_pcs("(1) a\n(2) b\n----\n(3) c\n(4) d\n-- R --\n(5) e");
