@@ -551,4 +551,53 @@ mod tests {
     fn pcs_three_dash_divider_is_an_error() {
         assert!(parse("(1) a\n---\n(2) b").is_err());
     }
+
+    fn inference_rules_of(src: &str, index: usize) -> Vec<String> {
+        match &only_pcs(src).items[index] {
+            PcsItem::Inference { rules, .. } => rules.clone(),
+            other => panic!("expected an inference item at {index}, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pcs_ruled_inference_single_rule() {
+        assert_eq!(
+            inference_rules_of("(1) a\n-- Modus Ponens --\n(2) b", 1),
+            vec!["Modus Ponens".to_string()]
+        );
+    }
+
+    #[test]
+    fn pcs_ruled_inference_multiple_rules() {
+        assert_eq!(
+            inference_rules_of("(1) a\n-- Rule A, Rule B --\n(2) b", 1),
+            vec!["Rule A".to_string(), "Rule B".to_string()]
+        );
+    }
+
+    #[test]
+    fn pcs_ruled_inference_without_closing_dashes_is_an_error() {
+        assert!(parse("(1) a\n-- Modus Ponens\n(2) b").is_err());
+    }
+
+    #[test]
+    fn pcs_multi_step_interleaved() {
+        // premises -> bare inference -> intermediary -> premise -> ruled inference -> main
+        let pcs = only_pcs("(1) a\n(2) b\n----\n(3) c\n(4) d\n-- R --\n(5) e");
+        assert_eq!(pcs.items.len(), 7);
+        assert!(matches!(&pcs.items[2], PcsItem::Inference { rules, .. } if rules.is_empty()));
+        assert_eq!(
+            inference_rules_of("(1) a\n(2) b\n----\n(3) c\n(4) d\n-- R --\n(5) e", 5),
+            vec!["R".to_string()]
+        );
+        let numbers: Vec<usize> = pcs
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                PcsItem::Statement { number, .. } => Some(*number),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(numbers, vec![1, 2, 3, 4, 5]);
+    }
 }
