@@ -581,6 +581,53 @@ mod tests {
     }
 
     #[test]
+    fn pcs_numbered_statement_spans_continuation_lines() {
+        let pcs = only_pcs("(1) one\n    two");
+        assert_eq!(pcs.items.len(), 1);
+        match &pcs.items[0] {
+            PcsItem::Statement { statement, .. } => assert_eq!(statement.text, "one two"),
+            other => panic!("expected a statement item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pcs_marker_ends_a_previous_statements_continuation() {
+        // Without the guard, `(2) b` would be swallowed as continuation text of (1).
+        let pcs = only_pcs("(1) one\ntwo\n(2) b");
+        match &pcs.items[0] {
+            PcsItem::Statement {
+                number, statement, ..
+            } => {
+                assert_eq!(*number, 1);
+                assert_eq!(statement.text, "one two");
+            }
+            other => panic!("expected a statement item, got {other:?}"),
+        }
+        assert!(matches!(&pcs.items[1], PcsItem::Statement { number: 2, .. }));
+    }
+
+    #[test]
+    fn pcs_ends_at_heading_and_reference() {
+        let blocks = parse("(1) a\n# H").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+        assert!(matches!(&blocks[0], Block::Pcs(_)));
+        assert!(matches!(&blocks[1], Block::Heading(_)));
+
+        let blocks = parse("(1) a\n[X]").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+        assert!(matches!(&blocks[0], Block::Pcs(_)));
+        assert!(matches!(&blocks[1], Block::Statement(s) if s.is_reference));
+    }
+
+    #[test]
+    fn blank_line_separates_two_pcs_blocks() {
+        let blocks = parse("(1) a\n\n(2) b").unwrap().blocks;
+        assert_eq!(blocks.len(), 2);
+        assert!(matches!(&blocks[0], Block::Pcs(p) if p.items.len() == 1));
+        assert!(matches!(&blocks[1], Block::Pcs(p) if p.items.len() == 1));
+    }
+
+    #[test]
     fn pcs_interspersed_child_relation() {
         let pcs = only_pcs("(1) a\n  +> [X]\n----\n(2) b");
         assert_eq!(pcs.items.len(), 4);
