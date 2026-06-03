@@ -6,6 +6,7 @@
 
 mod argument;
 mod heading;
+mod pcs;
 mod relation;
 mod statement;
 mod text;
@@ -19,6 +20,7 @@ use winnow::stream::LocatingSlice;
 
 use argument::argument;
 use heading::heading;
+use pcs::pcs;
 use relation::relation;
 use statement::statement;
 use trivia::skip_trivia;
@@ -44,6 +46,7 @@ fn block(input: &mut Input<'_>) -> ModalResult<Block> {
     alt((
         heading.map(Block::Heading),
         relation.map(Block::Relation),
+        pcs.map(Block::Pcs),
         argument.map(Block::Argument),
         statement.map(Block::Statement),
     ))
@@ -54,8 +57,8 @@ fn block(input: &mut Input<'_>) -> ModalResult<Block> {
 mod tests {
     use super::*;
     use argdown_core::{
-        Argument, Heading, Relation, RelationDirection, RelationOperator, RelationTarget, Span,
-        Statement,
+        Argument, Heading, Pcs, PcsItem, Relation, RelationDirection, RelationOperator,
+        RelationTarget, Span, Statement,
     };
 
     #[test]
@@ -486,5 +489,43 @@ mod tests {
     #[test]
     fn relation_operator_without_a_target_is_an_error() {
         assert!(parse("+ ").is_err());
+    }
+
+    /// Extract the single PCS a source parses to, panicking otherwise.
+    fn only_pcs(src: &str) -> Pcs {
+        match parse(src).unwrap().blocks.as_slice() {
+            [Block::Pcs(p)] => p.clone(),
+            other => panic!("{src:?} did not parse as a single PCS: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pcs_single_numbered_statement() {
+        let pcs = only_pcs("(1) a");
+        assert_eq!(pcs.items.len(), 1);
+        match &pcs.items[0] {
+            PcsItem::Statement {
+                number, statement, ..
+            } => {
+                assert_eq!(*number, 1);
+                assert_eq!(statement.text, "a");
+                assert_eq!(statement.title, None);
+            }
+            other => panic!("expected a statement item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pcs_two_numbered_statements() {
+        let pcs = only_pcs("(1) a\n(2) b");
+        let numbers: Vec<usize> = pcs
+            .items
+            .iter()
+            .map(|item| match item {
+                PcsItem::Statement { number, .. } => *number,
+                other => panic!("expected statement items, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(numbers, vec![1, 2]);
     }
 }
