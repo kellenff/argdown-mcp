@@ -49,6 +49,7 @@ pub struct Statement {
     pub text: String,
     pub is_reference: bool,
     pub span: Span,
+    pub inlines: Vec<Inline>,
 }
 
 /// An argument: a titled definition (`<T>: desc`) or a reference (`<T>`).
@@ -58,6 +59,25 @@ pub struct Argument {
     pub description: String,
     pub is_reference: bool,
     pub span: Span,
+    pub inlines: Vec<Inline>,
+}
+
+/// One inline element inside a statement/argument body. `span` is the full
+/// source extent of the element (opening delimiter through closing delimiter).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inline {
+    pub kind: InlineKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InlineKind {
+    Bold,
+    Italic,
+    Link { url: String },
+    StatementMention { title: String },
+    ArgumentMention { title: String },
+    Tag { tag: String },
 }
 
 /// A relation line (`+`, `<+`, `+>`, `-`, `<-`, `->`, `_`, `<_`, `_>`, `><`)

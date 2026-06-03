@@ -25,6 +25,7 @@ pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
                 start: span.start,
                 end,
             },
+            inlines: vec![],
         })
     } else {
         inline_ws.parse_next(input)?;
@@ -34,6 +35,7 @@ pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
             description: String::new(),
             is_reference: true,
             span: span.into(),
+            inlines: vec![],
         })
     }
 }
