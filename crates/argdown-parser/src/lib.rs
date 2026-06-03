@@ -537,8 +537,14 @@ mod tests {
             PcsItem::Inference { rules, .. } => assert!(rules.is_empty()),
             other => panic!("expected an inference item at index 2, got {other:?}"),
         }
-        assert!(matches!(&pcs.items[1], PcsItem::Statement { number: 2, .. }));
-        assert!(matches!(&pcs.items[3], PcsItem::Statement { number: 3, .. }));
+        assert!(matches!(
+            &pcs.items[1],
+            PcsItem::Statement { number: 2, .. }
+        ));
+        assert!(matches!(
+            &pcs.items[3],
+            PcsItem::Statement { number: 3, .. }
+        ));
     }
 
     #[test]
@@ -603,7 +609,10 @@ mod tests {
             }
             other => panic!("expected a statement item, got {other:?}"),
         }
-        assert!(matches!(&pcs.items[1], PcsItem::Statement { number: 2, .. }));
+        assert!(matches!(
+            &pcs.items[1],
+            PcsItem::Statement { number: 2, .. }
+        ));
     }
 
     #[test]

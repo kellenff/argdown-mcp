@@ -5,3 +5,9 @@
 
 # M2 brain-jam transcripts (ideation scratch)
 /.brainstorm/
+
+# codebase-memory local ADR/index (per-machine; authoritative copy is in the MCP)
+/.codebase-memory/
+
+# Snowball blast-radius scratch (per-session; read by the audit hook)
+/.snowball/
