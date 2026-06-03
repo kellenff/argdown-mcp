@@ -7,7 +7,7 @@ mod ast;
 mod error;
 
 pub use ast::{
-    Argument, Block, Document, Heading, Relation, RelationDirection, RelationOperator,
-    RelationTarget, Span, Statement,
+    Argument, Block, Document, Heading, Pcs, PcsItem, Relation, RelationDirection,
+    RelationOperator, RelationTarget, Span, Statement,
 };
 pub use error::Error;

@@ -31,6 +31,7 @@ pub enum Block {
     Statement(Statement),
     Argument(Argument),
     Relation(Relation),
+    Pcs(Pcs),
 }
 
 /// An ATX heading (`#`–`######`).
@@ -98,6 +99,32 @@ pub enum RelationDirection {
 pub enum RelationTarget {
     Statement(Statement),
     Argument(Argument),
+}
+
+/// A premise-conclusion structure: a flat, source-order sequence of items.
+/// Role assignment (premise/conclusion), inference→conclusion binding, and
+/// relation association are Layer B's job.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pcs {
+    pub items: Vec<PcsItem>,
+    /// First item span start → last item span end.
+    pub span: Span,
+}
+
+/// One line of a PCS, tagged by form (not role).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PcsItem {
+    /// `(n) <statement>` — content reuses the statement forms.
+    Statement {
+        number: usize,
+        statement: Statement,
+        /// The `(` of the marker → statement content end.
+        span: Span,
+    },
+    /// `----` (bare → empty rules) or `-- Rule, Rule --` (ruled).
+    Inference { rules: Vec<String>, span: Span },
+    /// An interspersed relation line, reusing the relation form (with indent).
+    Relation(Relation),
 }
 
 #[cfg(test)]
