@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::ascii::{line_ending, till_line_ending};
+use winnow::ascii::{digit1, line_ending, till_line_ending};
 use winnow::combinator::{alt, cut_err, eof, not, opt, repeat};
 use winnow::error::StrContext;
 use winnow::token::{one_of, take_while};
@@ -42,6 +42,15 @@ pub(crate) fn relation_marker(input: &mut Input<'_>) -> ModalResult<()> {
         .parse_next(input)
 }
 
+/// Match a line that begins (after indentation) with a numbered marker
+/// `( digits )` — the start of a PCS statement. Lets a continuation line stop
+/// before the next numbered statement instead of swallowing it as text.
+pub(crate) fn pcs_marker(input: &mut Input<'_>) -> ModalResult<()> {
+    (take_while(0.., [' ', '\t']), '(', digit1, ')')
+        .void()
+        .parse_next(input)
+}
+
 /// Succeeds (consuming nothing) when the cursor is at the start of a plain
 /// content line — not EOF, blank, a heading, a comment, or a new block.
 /// This is the shared precondition for `content_line` and the
@@ -54,6 +63,7 @@ fn at_content_line(input: &mut Input<'_>) -> ModalResult<()> {
         not(comment_start),
         not(block_head),
         not(relation_marker),
+        not(pcs_marker),
     )
         .void()
         .parse_next(input)
