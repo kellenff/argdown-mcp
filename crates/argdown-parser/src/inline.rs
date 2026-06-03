@@ -66,6 +66,9 @@ fn recognize(
     if let Some(n) = try_link(line, i, limit, base, out)? {
         return Ok(Some(n));
     }
+    if let Some(n) = try_mention(line, i, limit, base, out) {
+        return Ok(Some(n));
+    }
     Ok(None)
 }
 
@@ -163,6 +166,43 @@ fn try_link(
     // Nested inlines live in the display text between the brackets.
     scan_run(line, i + 1, close_bracket, base, out, false)?;
     Ok(Some(end - i))
+}
+
+/// `@[Title]` (statement) or `@<Title>` (argument). A lone `@`, or `@[`/`@<`
+/// with no closer, is literal (`None`).
+fn try_mention(
+    line: &str,
+    i: usize,
+    limit: usize,
+    base: usize,
+    out: &mut Vec<Inline>,
+) -> Option<usize> {
+    let bytes = line.as_bytes();
+    if bytes[i] != b'@' || i + 1 >= limit {
+        return None;
+    }
+    let (open, close) = match bytes[i + 1] {
+        b'[' => (b'[', b']'),
+        b'<' => (b'<', b'>'),
+        _ => return None,
+    };
+    debug_assert_eq!(open, bytes[i + 1]);
+    let close_idx = find_byte(line, i + 2, limit, close)?;
+    let title = line[i + 2..close_idx].trim().to_string();
+    let end = close_idx + 1;
+    let kind = if open == b'[' {
+        InlineKind::StatementMention { title }
+    } else {
+        InlineKind::ArgumentMention { title }
+    };
+    out.push(Inline {
+        kind,
+        span: Span {
+            start: base + i,
+            end: base + end,
+        },
+    });
+    Some(end - i)
 }
 
 /// First index of byte `b` in `line[from..limit]`, or `None`.

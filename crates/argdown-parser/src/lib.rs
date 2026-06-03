@@ -127,6 +127,30 @@ mod tests {
     }
 
     #[test]
+    fn inline_statement_mention() {
+        let s = only_statement("recall @[Other Claim] here");
+        match &s.inlines[0].kind {
+            InlineKind::StatementMention { title } => assert_eq!(title, "Other Claim"),
+            other => panic!("expected a statement mention, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_argument_mention() {
+        let s = only_statement("per @<Some Arg> there");
+        match &s.inlines[0].kind {
+            InlineKind::ArgumentMention { title } => assert_eq!(title, "Some Arg"),
+            other => panic!("expected an argument mention, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bare_at_is_literal() {
+        let s = only_statement("email a@b.com please");
+        assert!(s.inlines.is_empty());
+    }
+
+    #[test]
     fn no_space_after_underscore_is_italic_statement_not_undercut() {
         // `_emphasis_` (no space after the `_`) is an italic statement, while
         // `+ [B]` (space after the operator) is still a relation. The trailing
