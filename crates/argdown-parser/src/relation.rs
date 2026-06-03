@@ -5,13 +5,12 @@
 use argdown_core::{Relation, RelationDirection, RelationOperator, RelationTarget, Span};
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::combinator::{alt, cut_err, preceded};
+use winnow::combinator::{alt, cut_err};
 use winnow::token::take_while;
 
 use crate::Input;
 use crate::argument::argument;
 use crate::statement::statement;
-use crate::text::inline_ws;
 
 /// Parse one relation line: leading indent, an operator (which fixes both
 /// operator and direction), then a target. The operator is backtrackable, so a
@@ -23,7 +22,12 @@ pub(crate) fn relation(input: &mut Input<'_>) -> ModalResult<Relation> {
         .map(|ws: &str| ws.len())
         .parse_next(input)?;
     let ((operator, direction), op_span) = relation_operator.with_span().parse_next(input)?;
-    let target = cut_err(preceded(inline_ws, relation_target)).parse_next(input)?;
+    // A relation operator requires at least one trailing space/tab. This stays
+    // BEFORE the `cut_err` so a no-space line (e.g. `_i_`) backtracks and falls
+    // through to `statement`, matching the reference (`_word` is italic text,
+    // `_ target` is a relation).
+    take_while(1.., [' ', '\t']).void().parse_next(input)?;
+    let target = cut_err(relation_target).parse_next(input)?;
     let end = match &target {
         RelationTarget::Statement(s) => s.span.end,
         RelationTarget::Argument(a) => a.span.end,

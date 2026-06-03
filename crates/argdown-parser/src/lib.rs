@@ -6,6 +6,7 @@
 
 mod argument;
 mod heading;
+mod inline;
 mod pcs;
 mod relation;
 mod statement;
@@ -57,9 +58,57 @@ fn block(input: &mut Input<'_>) -> ModalResult<Block> {
 mod tests {
     use super::*;
     use argdown_core::{
-        Argument, Heading, Pcs, PcsItem, Relation, RelationDirection, RelationOperator,
-        RelationTarget, Span, Statement,
+        Argument, Heading, Inline, InlineKind, Pcs, PcsItem, Relation, RelationDirection,
+        RelationOperator, RelationTarget, Span, Statement,
     };
+
+    /// The single statement a source parses to, panicking otherwise.
+    fn only_statement(src: &str) -> Statement {
+        match parse(src).unwrap().blocks.as_slice() {
+            [Block::Statement(s)] => s.clone(),
+            other => panic!("{src:?} did not parse as a single statement: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_italic_and_bold_plain_statement() {
+        let s = only_statement("this is *it* and **bold**");
+        assert_eq!(
+            s.inlines,
+            vec![
+                Inline { kind: InlineKind::Italic, span: Span { start: 8, end: 12 } },
+                Inline { kind: InlineKind::Bold, span: Span { start: 17, end: 25 } },
+            ]
+        );
+    }
+
+    #[test]
+    fn inline_underscore_emphasis() {
+        let s = only_statement("_i_ and __b__");
+        assert_eq!(s.inlines[0].kind, InlineKind::Italic);
+        assert_eq!(s.inlines[1].kind, InlineKind::Bold);
+    }
+
+    #[test]
+    fn inline_emphasis_nests_as_contained_spans() {
+        let s = only_statement("**bold and *italic* inside**");
+        // Bold first (source order by start), then the contained italic.
+        assert_eq!(s.inlines[0].kind, InlineKind::Bold);
+        assert_eq!(s.inlines[1].kind, InlineKind::Italic);
+        let (b, i) = (s.inlines[0].span, s.inlines[1].span);
+        assert!(b.start <= i.start && i.end <= b.end, "italic must be contained in bold");
+    }
+
+    #[test]
+    fn no_space_after_underscore_is_italic_statement_not_undercut() {
+        // `_emphasis_` (no space after the `_`) is an italic statement, while
+        // `+ [B]` (space after the operator) is still a relation. The trailing
+        // space is the grammar boundary between an emphasis line and a relation.
+        let s = only_statement("_emphasis_ here");
+        assert_eq!(s.inlines[0].kind, InlineKind::Italic);
+        let r = only_relation("+ [B]");
+        assert_eq!(r.operator, RelationOperator::Support);
+    }
 
     #[test]
     fn parse_empty_input_yields_empty_document() {
