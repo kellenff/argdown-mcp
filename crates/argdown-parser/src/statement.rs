@@ -10,7 +10,9 @@ use winnow::combinator::{alt, delimited, eof, not, opt, repeat};
 use winnow::token::take_till;
 
 use crate::Input;
-use crate::text::{body_line, content_line, definition_body, finish_reference, inline_ws, normalize_contents};
+use crate::text::{
+    body_line, content_line, definition_body, finish_reference, inline_ws, normalize_contents,
+};
 use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Parse one statement: a bracketed definition/reference, or plain text.

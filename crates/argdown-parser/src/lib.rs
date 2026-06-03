@@ -76,8 +76,14 @@ mod tests {
         assert_eq!(
             s.inlines,
             vec![
-                Inline { kind: InlineKind::Italic, span: Span { start: 8, end: 12 } },
-                Inline { kind: InlineKind::Bold, span: Span { start: 17, end: 25 } },
+                Inline {
+                    kind: InlineKind::Italic,
+                    span: Span { start: 8, end: 12 }
+                },
+                Inline {
+                    kind: InlineKind::Bold,
+                    span: Span { start: 17, end: 25 }
+                },
             ]
         );
     }
@@ -96,7 +102,28 @@ mod tests {
         assert_eq!(s.inlines[0].kind, InlineKind::Bold);
         assert_eq!(s.inlines[1].kind, InlineKind::Italic);
         let (b, i) = (s.inlines[0].span, s.inlines[1].span);
-        assert!(b.start <= i.start && i.end <= b.end, "italic must be contained in bold");
+        assert!(
+            b.start <= i.start && i.end <= b.end,
+            "italic must be contained in bold"
+        );
+    }
+
+    #[test]
+    fn inline_link_with_url() {
+        let s = only_statement("see [the site](http://x.com) now");
+        assert_eq!(s.inlines.len(), 1);
+        match &s.inlines[0].kind {
+            InlineKind::Link { url } => assert_eq!(url, "http://x.com"),
+            other => panic!("expected a link, got {other:?}"),
+        }
+        // Span covers the whole `[the site](http://x.com)`.
+        assert_eq!(s.inlines[0].span, Span { start: 4, end: 28 });
+    }
+
+    #[test]
+    fn bracket_without_paren_is_literal() {
+        let s = only_statement("note [1] applies");
+        assert!(s.inlines.is_empty());
     }
 
     #[test]
