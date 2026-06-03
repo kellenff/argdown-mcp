@@ -6,8 +6,9 @@
 use argdown_core::{Pcs, PcsItem, Span};
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::ascii::digit1;
-use winnow::combinator::{cut_err, delimited, opt};
+use winnow::ascii::{digit1, line_ending};
+use winnow::combinator::{alt, cut_err, delimited, eof, opt, peek, preceded};
+use winnow::token::{take_till, take_while};
 
 use crate::Input;
 use crate::statement::statement;
@@ -21,7 +22,9 @@ pub(crate) fn pcs(input: &mut Input<'_>) -> ModalResult<Pcs> {
     let first = numbered_statement_item(input)?;
     let start = item_span_start(&first);
     let mut items = vec![first];
-    while let Some(item) = opt(numbered_statement_item).parse_next(input)? {
+    while let Some(item) =
+        opt(alt((numbered_statement_item, inference_item))).parse_next(input)?
+    {
         items.push(item);
     }
     let end = item_span_end(items.last().expect("pcs has at least one item"));
@@ -54,6 +57,57 @@ fn numbered_statement_item(input: &mut Input<'_>) -> ModalResult<PcsItem> {
 fn pcs_number(input: &mut Input<'_>) -> ModalResult<usize> {
     delimited('(', digit1, ')')
         .try_map(|s: &str| s.parse::<usize>())
+        .parse_next(input)
+}
+
+/// A bare divider (`-{4,}`) or a ruled divider (`-- Rule, Rule --`). A line
+/// starting with `--` commits to an inference line; a malformed one (e.g. `---`,
+/// or a ruled opener with no closing `--`) is an error.
+fn inference_item(input: &mut Input<'_>) -> ModalResult<PcsItem> {
+    inline_ws.parse_next(input)?;
+    peek("--").parse_next(input)?;
+    let (rules, span) = cut_err(inference_rules).with_span().parse_next(input)?;
+    opt(line_ending).parse_next(input)?;
+    Ok(PcsItem::Inference {
+        rules,
+        span: span.into(),
+    })
+}
+
+/// Classify an inference line already known to start with `--`.
+fn inference_rules(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
+    alt((bare_divider, ruled_divider)).parse_next(input)
+}
+
+/// `-{4,}` followed by only trailing whitespace → no rules.
+fn bare_divider(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
+    (
+        take_while(4.., '-'),
+        inline_ws,
+        peek(alt((line_ending.void(), eof.void()))),
+    )
+        .map(|_| Vec::new())
+        .parse_next(input)
+}
+
+/// `-- <content> --` on a single line → content split on commas into trimmed
+/// rule names. Content is bounded to the current line (`take_till` stops at a
+/// line ending), so a malformed line with no closing `--` fails here and
+/// `inference_item`'s `cut_err` turns it into a hard error — rather than scanning
+/// ahead to a later divider on another line.
+fn ruled_divider(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
+    preceded("--", take_till(0.., ['\r', '\n']))
+        .verify_map(|rest: &str| {
+            let inner = rest.trim_end().strip_suffix("--")?;
+            Some(
+                inner
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string)
+                    .collect(),
+            )
+        })
         .parse_next(input)
 }
 

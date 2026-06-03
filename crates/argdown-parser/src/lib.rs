@@ -528,4 +528,27 @@ mod tests {
             .collect();
         assert_eq!(numbers, vec![1, 2]);
     }
+
+    #[test]
+    fn pcs_bare_inference_line() {
+        let pcs = only_pcs("(1) a\n(2) b\n----\n(3) c");
+        assert_eq!(pcs.items.len(), 4);
+        match &pcs.items[2] {
+            PcsItem::Inference { rules, .. } => assert!(rules.is_empty()),
+            other => panic!("expected an inference item at index 2, got {other:?}"),
+        }
+        assert!(matches!(&pcs.items[1], PcsItem::Statement { number: 2, .. }));
+        assert!(matches!(&pcs.items[3], PcsItem::Statement { number: 3, .. }));
+    }
+
+    #[test]
+    fn pcs_bare_divider_allows_five_or_more_dashes() {
+        let pcs = only_pcs("(1) a\n-----\n(2) b");
+        assert!(matches!(&pcs.items[1], PcsItem::Inference { rules, .. } if rules.is_empty()));
+    }
+
+    #[test]
+    fn pcs_three_dash_divider_is_an_error() {
+        assert!(parse("(1) a\n---\n(2) b").is_err());
+    }
 }
