@@ -63,6 +63,9 @@ fn recognize(
     if let Some(n) = try_emphasis(line, i, limit, base, out)? {
         return Ok(Some(n));
     }
+    if let Some(n) = try_link(line, i, limit, base, out)? {
+        return Ok(Some(n));
+    }
     Ok(None)
 }
 
@@ -104,10 +107,17 @@ fn try_emphasis(
                 continue;
             }
             // Closer found at j..after. Emit this element, then recurse inner.
-            let kind = if double { InlineKind::Bold } else { InlineKind::Italic };
+            let kind = if double {
+                InlineKind::Bold
+            } else {
+                InlineKind::Italic
+            };
             out.push(Inline {
                 kind,
-                span: Span { start: base + i, end: base + after },
+                span: Span {
+                    start: base + i,
+                    end: base + after,
+                },
             });
             scan_run(line, open_end, j, base, out, false)?;
             return Ok(Some(after - i));
@@ -116,6 +126,51 @@ fn try_emphasis(
     }
     // Recognized opener with no closer on this line.
     Err(InlineError)
+}
+
+/// `[display](url)` — `display` may contain nested inlines; `url` is literal.
+/// A `[...]` not immediately followed by `(` is not a link (returns `None`); a
+/// `[...](` with no closing `)` is an error.
+fn try_link(
+    line: &str,
+    i: usize,
+    limit: usize,
+    base: usize,
+    out: &mut Vec<Inline>,
+) -> Result<Option<usize>, InlineError> {
+    if line.as_bytes()[i] != b'[' {
+        return Ok(None);
+    }
+    let Some(close_bracket) = find_byte(line, i + 1, limit, b']') else {
+        return Ok(None);
+    };
+    let paren_open = close_bracket + 1;
+    if paren_open >= limit || line.as_bytes()[paren_open] != b'(' {
+        return Ok(None);
+    }
+    let Some(close_paren) = find_byte(line, paren_open + 1, limit, b')') else {
+        return Err(InlineError);
+    };
+    let url = line[paren_open + 1..close_paren].to_string();
+    let end = close_paren + 1;
+    out.push(Inline {
+        kind: InlineKind::Link { url },
+        span: Span {
+            start: base + i,
+            end: base + end,
+        },
+    });
+    // Nested inlines live in the display text between the brackets.
+    scan_run(line, i + 1, close_bracket, base, out, false)?;
+    Ok(Some(end - i))
+}
+
+/// First index of byte `b` in `line[from..limit]`, or `None`.
+fn find_byte(line: &str, from: usize, limit: usize, b: u8) -> Option<usize> {
+    line.as_bytes()[from..limit]
+        .iter()
+        .position(|&x| x == b)
+        .map(|p| from + p)
 }
 
 fn char_len(line: &str, i: usize) -> usize {
