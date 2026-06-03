@@ -647,6 +647,53 @@ mod tests {
     }
 
     #[test]
+    fn pcs_numbered_statement_target_forms() {
+        // Definition target.
+        match &only_pcs("(1) [P]: text").items[0] {
+            PcsItem::Statement { statement, .. } => {
+                assert_eq!(statement.title.as_deref(), Some("P"));
+                assert_eq!(statement.text, "text");
+                assert!(!statement.is_reference);
+            }
+            other => panic!("expected a statement item, got {other:?}"),
+        }
+        // Reference target.
+        match &only_pcs("(1) [P]").items[0] {
+            PcsItem::Statement { statement, .. } => {
+                assert_eq!(statement.title.as_deref(), Some("P"));
+                assert!(statement.is_reference);
+            }
+            other => panic!("expected a statement item, got {other:?}"),
+        }
+        // Plain target.
+        match &only_pcs("(1) plain").items[0] {
+            PcsItem::Statement { statement, .. } => {
+                assert_eq!(statement.title, None);
+                assert_eq!(statement.text, "plain");
+            }
+            other => panic!("expected a statement item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pcs_numbered_marker_without_content_is_an_error() {
+        // The marker commits; an empty body is a hard error, not a plain statement.
+        assert!(parse("(1) a\n(2)").is_err());
+    }
+
+    #[test]
+    fn pcs_text_after_reference_target_is_an_error() {
+        assert!(parse("(1) [P] extra").is_err());
+    }
+
+    #[test]
+    fn parenthesized_non_number_is_a_plain_statement() {
+        // `(see note)` is not a numbered marker — it stays a plain statement.
+        let blocks = parse("(see note)").unwrap().blocks;
+        assert!(matches!(&blocks[0], Block::Statement(s) if s.text == "(see note)"));
+    }
+
+    #[test]
     fn pcs_multi_step_interleaved() {
         // premises -> bare inference -> intermediary -> premise -> ruled inference -> main
         let pcs = only_pcs("(1) a\n(2) b\n----\n(3) c\n(4) d\n-- R --\n(5) e");
