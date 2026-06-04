@@ -69,6 +69,9 @@ fn recognize(
     if let Some(n) = try_mention(line, i, limit, base, out) {
         return Ok(Some(n));
     }
+    if let Some(n) = try_tag(line, i, limit, base, out)? {
+        return Ok(Some(n));
+    }
     Ok(None)
 }
 
@@ -203,6 +206,56 @@ fn try_mention(
         },
     });
     Some(end - i)
+}
+
+/// `#tag` (contiguous `[A-Za-z0-9_-]`) or `#(multi word)`. A `#` not followed
+/// by a tag char or `(` is literal (`None`); `#(` with no `)` is an error.
+fn try_tag(
+    line: &str,
+    i: usize,
+    limit: usize,
+    base: usize,
+    out: &mut Vec<Inline>,
+) -> Result<Option<usize>, InlineError> {
+    let bytes = line.as_bytes();
+    if bytes[i] != b'#' || i + 1 >= limit {
+        return Ok(None);
+    }
+    if bytes[i + 1] == b'(' {
+        let Some(close) = find_byte(line, i + 2, limit, b')') else {
+            return Err(InlineError);
+        };
+        let tag = line[i + 2..close].trim().to_string();
+        let end = close + 1;
+        out.push(Inline {
+            kind: InlineKind::Tag { tag },
+            span: Span {
+                start: base + i,
+                end: base + end,
+            },
+        });
+        return Ok(Some(end - i));
+    }
+    if !is_tag_char(bytes[i + 1]) {
+        return Ok(None);
+    }
+    let mut j = i + 1;
+    while j < limit && is_tag_char(bytes[j]) {
+        j += 1;
+    }
+    let tag = line[i + 1..j].to_string();
+    out.push(Inline {
+        kind: InlineKind::Tag { tag },
+        span: Span {
+            start: base + i,
+            end: base + j,
+        },
+    });
+    Ok(Some(j - i))
+}
+
+fn is_tag_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'-' || b == b'_'
 }
 
 /// First index of byte `b` in `line[from..limit]`, or `None`.
