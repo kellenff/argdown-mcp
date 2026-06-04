@@ -13,7 +13,7 @@ use winnow::token::{literal, one_of, take_while};
 
 use crate::Input;
 use crate::inline::scan_line;
-use crate::metadata::capture_metadata;
+use crate::metadata::{capture_metadata, find_top_level_brace};
 use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Consume run of spaces and tabs (no line breaks).
@@ -84,11 +84,11 @@ pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, R
     Ok((line, span))
 }
 
-/// Net `{` minus `}` in `line`, ignoring braces inside quotes (and inside a
-/// double-quoted string, treating `\` as escaping the next byte). Mirrors the
-/// quote/escape rules of `capture_metadata` — `\` is *not* an escape outside
-/// quotes — so the body extent and the block scanner agree on where a `{…}`
-/// block opens and closes.
+/// Net `{` minus `}` in `line`. Braces inside `"…"` or `'…'` quoted strings
+/// are ignored; inside a double-quoted string `\"` escapes the next byte (so
+/// `"}` doesn't close the string early), but `\` outside quotes is literal.
+/// Matches the rules of `capture_metadata` so body extent and block scanner
+/// agree on where a `{…}` block opens and closes.
 fn brace_delta(line: &str) -> isize {
     let bytes = line.as_bytes();
     let mut delta = 0isize;
@@ -288,21 +288,6 @@ fn reference_metadata(input: &mut Input<'_>) -> ModalResult<Option<Metadata>> {
     literal(&line[..consumed]).void().parse_next(input)?;
     inline_ws.parse_next(input)?;
     Ok(Some(m))
-}
-
-/// Byte index of the first unescaped (top-level) `{` in `s`, or `None`. `\{` is
-/// literal, matching the metadata scanner's escape rule.
-fn find_top_level_brace(s: &str) -> Option<usize> {
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < s.len() {
-        match bytes[i] {
-            b'\\' => i += 2,
-            b'{' => return Some(i),
-            _ => i += 1,
-        }
-    }
-    None
 }
 
 /// Called right after a reference's closing bracket and `inline_ws` (and any

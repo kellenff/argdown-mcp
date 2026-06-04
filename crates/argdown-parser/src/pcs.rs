@@ -11,7 +11,7 @@ use winnow::combinator::{alt, cut_err, delimited, eof, opt, peek, preceded};
 use winnow::error::{ContextError, ErrMode};
 use winnow::token::{take_till, take_while};
 
-use crate::metadata::capture_metadata;
+use crate::metadata::{capture_metadata, find_top_level_brace};
 
 use crate::Input;
 use crate::relation::relation;
@@ -136,20 +136,6 @@ fn ruled_divider(input: &mut Input<'_>) -> ModalResult<(Vec<String>, Option<Meta
         .map(str::to_string)
         .collect();
     Ok((rules, metadata))
-}
-
-/// Byte index of the first unescaped `{` in `s`, or `None`.
-fn find_top_level_brace(s: &str) -> Option<usize> {
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < s.len() {
-        match bytes[i] {
-            b'\\' => i += 2,
-            b'{' => return Some(i),
-            _ => i += 1,
-        }
-    }
-    None
 }
 
 /// An interspersed relation line, reusing the relation parser.
