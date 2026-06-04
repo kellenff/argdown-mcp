@@ -2,17 +2,14 @@
 
 use std::ops::Range;
 
-use argdown_core::{Inline, Metadata, Span, Statement};
+use argdown_core::{Span, Statement};
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::ascii::{line_ending, till_line_ending};
-use winnow::combinator::{alt, delimited, eof, not, opt, repeat};
+use winnow::combinator::{alt, delimited, eof, not, opt};
 use winnow::token::take_till;
 
 use crate::Input;
-use crate::text::{
-    body_line, content_line, definition_body, finish_reference, inline_ws, normalize_contents,
-};
+use crate::text::{body_lines, definition_body, finish_reference, inline_ws, process_body};
 use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Parse one statement: a bracketed definition/reference, or plain text.
@@ -60,7 +57,9 @@ fn statement_title(input: &mut Input<'_>) -> ModalResult<(String, Range<usize>)>
         .parse_next(input)
 }
 
-/// A plain statement: one or more content lines of free text, normalized.
+/// A plain statement: one or more content lines of free text, normalized. The
+/// body extent is brace-aware so a trailing multi-line `{…}` metadata block is
+/// read whole.
 fn plain_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
     (
         not(eof),
@@ -69,30 +68,17 @@ fn plain_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
         not(comment_start),
     )
         .parse_next(input)?;
-    let (first, first_span) = till_line_ending.with_span().parse_next(input)?;
-    opt(line_ending).parse_next(input)?;
-    let rest: Vec<(&str, Range<usize>)> = repeat(0.., content_line).parse_next(input)?;
-    let end = rest.last().map_or(first_span.end, |(_, span)| span.end);
-
-    let mut inlines: Vec<Inline> = Vec::new();
-    let mut metadata: Option<Metadata> = None;
-    let mut contents: Vec<&str> = Vec::new();
-    contents.push(body_line(
-        first,
-        first_span.start,
-        &mut inlines,
-        &mut metadata,
-    )?);
-    for (line, span) in &rest {
-        contents.push(body_line(line, span.start, &mut inlines, &mut metadata)?);
-    }
-    let text = normalize_contents(contents);
+    let body = body_lines(input)?;
+    // The precondition above guarantees a first line, so the body is non-empty.
+    let span_start = body.lines[0].1.start;
+    let end = body.end;
+    let (text, inlines, metadata) = process_body(&body)?;
     Ok(Statement {
         title: None,
         text,
         is_reference: false,
         span: Span {
-            start: first_span.start,
+            start: span_start,
             end,
         },
         inlines,

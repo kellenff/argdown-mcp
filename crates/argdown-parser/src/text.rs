@@ -7,7 +7,7 @@ use argdown_core::{Inline, Metadata};
 use winnow::ModalResult;
 use winnow::Parser;
 use winnow::ascii::{digit1, line_ending, till_line_ending};
-use winnow::combinator::{alt, cut_err, eof, not, opt, repeat};
+use winnow::combinator::{alt, cut_err, eof, not, opt};
 use winnow::error::{ContextError, ErrMode, StrContext};
 use winnow::token::{one_of, take_while};
 
@@ -72,6 +72,9 @@ fn at_content_line(input: &mut Input<'_>) -> ModalResult<()> {
         .parse_next(input)
 }
 
+/// A raw body line: the slice (no line ending) and its absolute byte span.
+pub(crate) type BodyLine<'s> = (&'s str, Range<usize>);
+
 /// One continuation content line: not EOF, blank, a heading, a comment, or a
 /// new block. Returns the raw line (no line ending) and its byte span.
 pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, Range<usize>)> {
@@ -81,38 +84,144 @@ pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, R
     Ok((line, span))
 }
 
-/// Scan one raw body line (`text`, absolute start `base`); append its inlines to
-/// `out` and return the content slice (comment- and metadata-stripped) for
-/// normalization. If the line opens a single-line metadata `{…}` block, capture
-/// it into `meta` (only trivia — whitespace or a `//` comment — may follow the
-/// closing `}`, else a hard error).
-pub(crate) fn body_line<'s>(
-    text: &'s str,
-    base: usize,
-    out: &mut Vec<Inline>,
-    meta: &mut Option<Metadata>,
-) -> ModalResult<&'s str> {
-    match scan_line(text, base) {
-        Ok((mut inlines, content_len, meta_open)) => {
-            out.append(&mut inlines);
-            if let Some(open) = meta_open {
-                match capture_metadata(text, base, open) {
-                    Ok(m) => {
-                        let end_in_line = m.span.end - base;
-                        // Only trivia may follow the closing `}` on this line.
-                        let tail = text[end_in_line..].trim_start();
-                        if !(tail.is_empty() || tail.starts_with("//")) {
-                            return Err(ErrMode::Cut(ContextError::new()));
-                        }
-                        *meta = Some(m);
-                    }
-                    Err(_) => return Err(ErrMode::Cut(ContextError::new())),
+/// Net `{` minus `}` in `line`, ignoring braces inside quotes (and inside a
+/// double-quoted string, treating `\` as escaping the next byte). Mirrors the
+/// quote/escape rules of `capture_metadata` — `\` is *not* an escape outside
+/// quotes — so the body extent and the block scanner agree on where a `{…}`
+/// block opens and closes.
+fn brace_delta(line: &str) -> isize {
+    let bytes = line.as_bytes();
+    let mut delta = 0isize;
+    let mut quote: Option<u8> = None;
+    let mut i = 0;
+    while i < line.len() {
+        let b = bytes[i];
+        match quote {
+            Some(q) => {
+                if b == b'\\' && q == b'"' {
+                    i += 2;
+                    continue;
+                }
+                if b == q {
+                    quote = None;
                 }
             }
-            Ok(&text[..content_len])
+            None => match b {
+                b'"' | b'\'' => quote = Some(b),
+                b'{' => delta += 1,
+                b'}' => delta -= 1,
+                _ => {}
+            },
         }
-        Err(_) => Err(ErrMode::Cut(ContextError::new())),
+        i += 1;
     }
+    delta
+}
+
+/// Read continuation lines after the first body line. Normally these are
+/// `content_line`s (stopping at a blank/marker/EOF), but while a metadata `{…}`
+/// block is open (cumulative brace depth > 0) we consume raw lines
+/// unconditionally so the block can close. `open_depth` is the first line's
+/// brace delta.
+fn body_continuation<'s>(
+    input: &mut Input<'s>,
+    open_depth: isize,
+) -> ModalResult<Vec<BodyLine<'s>>> {
+    let mut depth = open_depth;
+    let mut lines: Vec<BodyLine> = Vec::new();
+    loop {
+        if depth > 0 {
+            // Inside a metadata block: take the next raw line whatever it is.
+            if eof::<_, ContextError>.parse_peek(*input).is_ok() {
+                // Unterminated block — let the body scanner surface the error.
+                return Ok(lines);
+            }
+            let (line, span) = till_line_ending.with_span().parse_next(input)?;
+            opt(line_ending).parse_next(input)?;
+            depth += brace_delta(line);
+            lines.push((line, span));
+        } else {
+            match opt(content_line).parse_next(input)? {
+                Some((line, span)) => {
+                    depth += brace_delta(line);
+                    lines.push((line, span));
+                }
+                None => return Ok(lines),
+            }
+        }
+    }
+}
+
+/// The result of reading a definition/plain-statement body: the body lines (each
+/// with its absolute byte span), the verbatim contiguous body source from the
+/// first line's start through the last body line, and the body's end offset.
+/// `src` together with `lines[0].1.start` lets the metadata block be sliced from
+/// the real source — preserving the original line endings (`\r\n` or `\n`).
+pub(crate) struct Body<'s> {
+    pub lines: Vec<BodyLine<'s>>,
+    pub src: &'s str,
+    pub end: usize,
+}
+
+/// Read all body lines for a definition/plain statement: the first line plus a
+/// brace-aware run of continuation lines. Captures the verbatim body source via
+/// winnow's taken-slice so the line endings are preserved exactly.
+pub(crate) fn body_lines<'s>(input: &mut Input<'s>) -> ModalResult<Body<'s>> {
+    let (lines, src) = read_body_lines.with_taken().parse_next(input)?;
+    let end = lines.last().map_or(0, |(_, span)| span.end);
+    Ok(Body { lines, src, end })
+}
+
+/// Inner body reader: the first line plus the brace-aware continuation run.
+/// Wrapped by `body_lines` in `with_taken` to recover the verbatim source.
+fn read_body_lines<'s>(input: &mut Input<'s>) -> ModalResult<Vec<BodyLine<'s>>> {
+    let (first, first_span) = till_line_ending.with_span().parse_next(input)?;
+    opt(line_ending).parse_next(input)?;
+    let rest = body_continuation(input, brace_delta(first))?;
+    let mut lines = Vec::with_capacity(rest.len() + 1);
+    lines.push((first, first_span));
+    lines.extend(rest);
+    Ok(lines)
+}
+
+/// Inline-scan each body line and locate a top-level metadata `{`. When found,
+/// the block is captured from the verbatim contiguous body source (it may run
+/// into later lines; slicing the real source preserves the original line endings
+/// and keeps every offset absolute). Returns the normalized text (pre-metadata
+/// content), the inlines, and any metadata. Only trivia (whitespace or a `//`
+/// comment) may follow the closing `}`, else a hard error; an unterminated block
+/// is also a hard error.
+pub(crate) fn process_body(body: &Body) -> ModalResult<(String, Vec<Inline>, Option<Metadata>)> {
+    let mut inlines = Vec::new();
+    let mut contents: Vec<&str> = Vec::new();
+    let mut metadata: Option<Metadata> = None;
+    // Absolute offset of `body.src[0]` — the body's verbatim source slice.
+    let base = body.lines.first().map_or(0, |(_, span)| span.start);
+    for (line, span) in &body.lines {
+        match scan_line(line, span.start) {
+            Ok((mut found, content_len, meta_open)) => {
+                inlines.append(&mut found);
+                contents.push(&line[..content_len]);
+                if let Some(open) = meta_open {
+                    // `open` is relative to this line's start (== span.start),
+                    // which equals its offset into the contiguous body source.
+                    let block_open = span.start - base + open;
+                    let m = capture_metadata(body.src, base, block_open)
+                        .map_err(|_| ErrMode::<ContextError>::Cut(ContextError::new()))?;
+                    // Only trivia may follow the closing `}`.
+                    let after = m.span.end - base;
+                    let tail = body.src[after..].split("//").next().unwrap_or("").trim();
+                    if !tail.is_empty() {
+                        return Err(ErrMode::Cut(ContextError::new()));
+                    }
+                    metadata = Some(m);
+                    break;
+                }
+            }
+            Err(_) => return Err(ErrMode::Cut(ContextError::new())),
+        }
+    }
+    Ok((normalize_contents(contents), inlines, metadata))
 }
 
 /// Trim each content slice, drop empties, join with a single space.
@@ -128,29 +237,15 @@ pub(crate) fn normalize_contents<'a>(contents: impl IntoIterator<Item = &'a str>
 }
 
 /// Read a definition body: remainder of the current line plus continuation
-/// lines. Returns the normalized text, the body's end offset, the inlines, and
-/// any single-line trailing `{…}` metadata.
+/// lines (brace-aware, so a multi-line `{…}` block is read whole). Returns the
+/// normalized text, the body's end offset, the inlines, and any trailing
+/// `{…}` metadata.
 pub(crate) fn definition_body(
     input: &mut Input<'_>,
 ) -> ModalResult<(String, usize, Vec<Inline>, Option<Metadata>)> {
-    let (first, first_span) = till_line_ending.with_span().parse_next(input)?;
-    opt(line_ending).parse_next(input)?;
-    let rest: Vec<(&str, Range<usize>)> = repeat(0.., content_line).parse_next(input)?;
-    let end = rest.last().map_or(first_span.end, |(_, span)| span.end);
-
-    let mut inlines = Vec::new();
-    let mut metadata: Option<Metadata> = None;
-    let mut contents: Vec<&str> = Vec::new();
-    contents.push(body_line(
-        first,
-        first_span.start,
-        &mut inlines,
-        &mut metadata,
-    )?);
-    for (line, span) in &rest {
-        contents.push(body_line(line, span.start, &mut inlines, &mut metadata)?);
-    }
-    let text = normalize_contents(contents);
+    let body = body_lines(input)?;
+    let end = body.end;
+    let (text, inlines, metadata) = process_body(&body)?;
     Ok((text, end, inlines, metadata))
 }
 

@@ -971,4 +971,29 @@ mod tests {
         assert_eq!(s.inlines.len(), 1);
         assert_eq!(s.metadata.unwrap().raw, "k: v");
     }
+
+    #[test]
+    fn multi_line_metadata_block() {
+        let s = only_statement("[S]: text {\n  a: b\n  c: d\n}");
+        assert_eq!(s.text, "text");
+        let raw = s.metadata.unwrap().raw;
+        assert!(
+            raw.contains("a: b") && raw.contains("c: d"),
+            "raw was {raw:?}"
+        );
+    }
+
+    #[test]
+    fn crlf_multi_line_metadata_block() {
+        let src = "[S]: text {\r\n  a: b\r\n  c: d\r\n}";
+        let blocks = parse(src).unwrap().blocks;
+        match &blocks[0] {
+            Block::Statement(s) => {
+                let m = s.metadata.as_ref().unwrap();
+                assert_eq!(&src[m.span.start..m.span.end], "{\r\n  a: b\r\n  c: d\r\n}");
+                assert_eq!(m.raw, "\r\n  a: b\r\n  c: d\r\n");
+            }
+            other => panic!("expected a statement, got {other:?}"),
+        }
+    }
 }
