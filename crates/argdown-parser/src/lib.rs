@@ -897,4 +897,34 @@ mod tests {
             .collect();
         assert_eq!(numbers, vec![1, 2, 3, 4, 5]);
     }
+
+    #[test]
+    fn inline_in_argument_description() {
+        let blocks = parse("<A>: this has **bold** text").unwrap().blocks;
+        match &blocks[0] {
+            Block::Argument(a) => assert_eq!(a.inlines[0].kind, InlineKind::Bold),
+            other => panic!("expected an argument, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_in_pcs_numbered_statement() {
+        let blocks = parse("(1) a claim with *emphasis*").unwrap().blocks;
+        match &blocks[0] {
+            Block::Pcs(p) => match &p.items[0] {
+                PcsItem::Statement { statement, .. } => {
+                    assert_eq!(statement.inlines[0].kind, InlineKind::Italic);
+                }
+                other => panic!("expected a statement item, got {other:?}"),
+            },
+            other => panic!("expected a PCS, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_span_absolute_across_a_definition_title() {
+        // `[T]: ` is 5 bytes, so the bold opener `**` starts at byte 5.
+        let s = only_statement("[T]: **b**");
+        assert_eq!(s.inlines[0].span, Span { start: 5, end: 10 });
+    }
 }
