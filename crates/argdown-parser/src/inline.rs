@@ -189,7 +189,6 @@ fn try_mention(
         b'<' => (b'<', b'>'),
         _ => return None,
     };
-    debug_assert_eq!(open, bytes[i + 1]);
     let close_idx = find_byte(line, i + 2, limit, close)?;
     let title = line[i + 2..close_idx].trim().to_string();
     let end = close_idx + 1;
@@ -274,6 +273,7 @@ fn is_space(b: u8) -> bool {
     b == b' ' || b == b'\t'
 }
 
+// ASCII-only: a non-ASCII letter adjacent to `_` does not trigger the word guard.
 fn is_alnum(b: u8) -> bool {
     b.is_ascii_alphanumeric()
 }
