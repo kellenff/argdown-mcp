@@ -151,6 +151,30 @@ mod tests {
     }
 
     #[test]
+    fn inline_contiguous_tag() {
+        let s = only_statement("flagged #simple-tag here");
+        match &s.inlines[0].kind {
+            InlineKind::Tag { tag } => assert_eq!(tag, "simple-tag"),
+            other => panic!("expected a tag, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_parenthesized_tag() {
+        let s = only_statement("flagged #(multi word) here");
+        match &s.inlines[0].kind {
+            InlineKind::Tag { tag } => assert_eq!(tag, "multi word"),
+            other => panic!("expected a tag, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bare_hash_is_literal() {
+        let s = only_statement("rooms # and # are free");
+        assert!(s.inlines.is_empty());
+    }
+
+    #[test]
     fn no_space_after_underscore_is_italic_statement_not_undercut() {
         // `_emphasis_` (no space after the `_`) is an italic statement, while
         // `+ [B]` (space after the operator) is still a relation. The trailing
@@ -337,7 +361,12 @@ mod tests {
                 text: "#nospace".to_string(),
                 is_reference: false,
                 span: Span { start: 0, end: 8 },
-                inlines: vec![],
+                inlines: vec![Inline {
+                    kind: InlineKind::Tag {
+                        tag: "nospace".to_string()
+                    },
+                    span: Span { start: 0, end: 8 },
+                }],
             })]
         );
     }
