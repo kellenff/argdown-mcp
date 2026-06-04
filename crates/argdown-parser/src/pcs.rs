@@ -3,12 +3,15 @@
 //! items in source order. Role assignment, inference→conclusion binding, and
 //! relation association are Layer B's job.
 
-use argdown_core::{Pcs, PcsItem, Span};
+use argdown_core::{Metadata, Pcs, PcsItem, Span};
 use winnow::ModalResult;
 use winnow::Parser;
 use winnow::ascii::{digit1, line_ending};
 use winnow::combinator::{alt, cut_err, delimited, eof, opt, peek, preceded};
+use winnow::error::{ContextError, ErrMode};
 use winnow::token::{take_till, take_while};
+
+use crate::metadata::capture_metadata;
 
 use crate::Input;
 use crate::relation::relation;
@@ -71,21 +74,21 @@ fn pcs_number(input: &mut Input<'_>) -> ModalResult<usize> {
 fn inference_item(input: &mut Input<'_>) -> ModalResult<PcsItem> {
     inline_ws.parse_next(input)?;
     peek("--").parse_next(input)?;
-    let (rules, span) = cut_err(inference_rules).with_span().parse_next(input)?;
+    let ((rules, metadata), span) = cut_err(inference_rules).with_span().parse_next(input)?;
     opt(line_ending).parse_next(input)?;
     Ok(PcsItem::Inference {
         rules,
-        metadata: None,
+        metadata,
         span: span.into(),
     })
 }
 
 /// Classify an inference line already known to start with `--`.
-fn inference_rules(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
-    alt((bare_divider, ruled_divider)).parse_next(input)
+fn inference_rules(input: &mut Input<'_>) -> ModalResult<(Vec<String>, Option<Metadata>)> {
+    alt((bare_divider.map(|rules| (rules, None)), ruled_divider)).parse_next(input)
 }
 
-/// `-{4,}` followed by only trailing whitespace → no rules.
+/// `-{4,}` followed by only trailing whitespace → no rules, no metadata.
 fn bare_divider(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
     (
         take_while(4.., '-'),
@@ -96,25 +99,52 @@ fn bare_divider(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
         .parse_next(input)
 }
 
-/// `-- <content> --` on a single line → content split on commas into trimmed
-/// rule names. Content is bounded to the current line (`take_till` stops at a
-/// line ending), so a malformed line with no closing `--` fails here and
-/// `inference_item`'s `cut_err` turns it into a hard error — rather than scanning
-/// ahead to a later divider on another line.
-fn ruled_divider(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
-    preceded("--", take_till(0.., ['\r', '\n']))
-        .verify_map(|rest: &str| {
-            let inner = rest.trim_end().strip_suffix("--")?;
-            Some(
-                inner
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty())
-                    .map(str::to_string)
-                    .collect(),
-            )
-        })
-        .parse_next(input)
+/// `-- <names> {metadata}? --` on a single line. Splits a trailing top-level
+/// `{…}` block out of the content; the remainder is comma-split rule names.
+/// Content is bounded to the current line (`take_till` stops at a line ending),
+/// so a malformed line with no closing `--` fails here and `inference_item`'s
+/// `cut_err` turns it into a hard error.
+fn ruled_divider(input: &mut Input<'_>) -> ModalResult<(Vec<String>, Option<Metadata>)> {
+    let (content, content_span) = preceded("--", take_till(0.., ['\r', '\n']))
+        .with_span()
+        .parse_next(input)?;
+    let inner = match content.trim_end().strip_suffix("--") {
+        Some(inner) => inner,
+        None => return Err(ErrMode::Cut(ContextError::new())),
+    };
+    // A top-level `{` in `inner` opens metadata; split there.
+    let (names_str, metadata) = match find_top_level_brace(inner) {
+        Some(open) => {
+            // Absolute offset of `inner[0]`: content starts after the opening
+            // `--`, i.e. content_span.start + 2.
+            let base = content_span.start + 2;
+            let m = capture_metadata(inner, base, open)
+                .map_err(|_| ErrMode::<ContextError>::Cut(ContextError::new()))?;
+            (&inner[..open], Some(m))
+        }
+        None => (inner, None),
+    };
+    let rules = names_str
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect();
+    Ok((rules, metadata))
+}
+
+/// Byte index of the first unescaped `{` in `s`, or `None`.
+fn find_top_level_brace(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < s.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'{' => return Some(i),
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 /// An interspersed relation line, reusing the relation parser.
