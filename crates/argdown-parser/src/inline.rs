@@ -8,18 +8,33 @@ use argdown_core::{Inline, InlineKind, Span};
 pub(crate) struct InlineError;
 
 /// Scan one body-line slice. `base` is the absolute source offset of `line`'s
-/// first byte. Returns the inline elements (absolute spans) and the byte index
-/// in `line` where content ends — the start of a trailing `//` comment, else
-/// `line.len()`. Errors on unclosed recognized markup.
-pub(crate) fn scan_line(line: &str, base: usize) -> Result<(Vec<Inline>, usize), InlineError> {
+/// first byte. Returns the inline elements (absolute spans), the byte index in
+/// `line` where content ends — the start of a trailing `//` comment or a
+/// top-level metadata `{`, else `line.len()` — and `Some(index)` if a top-level
+/// unescaped `{` (a metadata opener) was found. Errors on unclosed markup.
+pub(crate) fn scan_line(
+    line: &str,
+    base: usize,
+) -> Result<(Vec<Inline>, usize, Option<usize>), InlineError> {
     let mut inlines = Vec::new();
-    let end = scan_run(line, 0, line.len(), base, &mut inlines, true)?;
-    Ok((inlines, end))
+    let mut meta_open: Option<usize> = None;
+    let end = scan_run(
+        line,
+        0,
+        line.len(),
+        base,
+        &mut inlines,
+        true,
+        &mut meta_open,
+    )?;
+    Ok((inlines, end, meta_open))
 }
 
 /// Scan `line[start..limit]`, pushing recognized inlines. `top` enables the
-/// trailing `//`-comment stop (only at the outermost level, not inside an
-/// element). Returns the byte index where scanning stopped.
+/// trailing `//`-comment stop and the top-level metadata `{` stop (only at the
+/// outermost level, not inside an element). When a top-level `{` is reached its
+/// byte index is recorded in `meta_open`. Returns the byte index where scanning
+/// stopped.
 fn scan_run(
     line: &str,
     start: usize,
@@ -27,6 +42,7 @@ fn scan_run(
     base: usize,
     out: &mut Vec<Inline>,
     top: bool,
+    meta_open: &mut Option<usize>,
 ) -> Result<usize, InlineError> {
     let mut i = start;
     while i < limit {
@@ -42,7 +58,11 @@ fn scan_run(
         if top && rest.starts_with("//") {
             return Ok(i);
         }
-        match recognize(line, i, limit, base, out)? {
+        if top && line.as_bytes()[i] == b'{' {
+            *meta_open = Some(i);
+            return Ok(i);
+        }
+        match recognize(line, i, limit, base, out, meta_open)? {
             Some(consumed) => i += consumed,
             None => i += char_len(line, i),
         }
@@ -59,11 +79,12 @@ fn recognize(
     limit: usize,
     base: usize,
     out: &mut Vec<Inline>,
+    meta_open: &mut Option<usize>,
 ) -> Result<Option<usize>, InlineError> {
-    if let Some(n) = try_emphasis(line, i, limit, base, out)? {
+    if let Some(n) = try_emphasis(line, i, limit, base, out, meta_open)? {
         return Ok(Some(n));
     }
-    if let Some(n) = try_link(line, i, limit, base, out)? {
+    if let Some(n) = try_link(line, i, limit, base, out, meta_open)? {
         return Ok(Some(n));
     }
     if let Some(n) = try_mention(line, i, limit, base, out) {
@@ -82,6 +103,7 @@ fn try_emphasis(
     limit: usize,
     base: usize,
     out: &mut Vec<Inline>,
+    meta_open: &mut Option<usize>,
 ) -> Result<Option<usize>, InlineError> {
     let bytes = line.as_bytes();
     let c = bytes[i];
@@ -125,7 +147,7 @@ fn try_emphasis(
                     end: base + after,
                 },
             });
-            scan_run(line, open_end, j, base, out, false)?;
+            scan_run(line, open_end, j, base, out, false, meta_open)?;
             return Ok(Some(after - i));
         }
         j += char_len(line, j);
@@ -143,6 +165,7 @@ fn try_link(
     limit: usize,
     base: usize,
     out: &mut Vec<Inline>,
+    meta_open: &mut Option<usize>,
 ) -> Result<Option<usize>, InlineError> {
     if line.as_bytes()[i] != b'[' {
         return Ok(None);
@@ -167,7 +190,7 @@ fn try_link(
         },
     });
     // Nested inlines live in the display text between the brackets.
-    scan_run(line, i + 1, close_bracket, base, out, false)?;
+    scan_run(line, i + 1, close_bracket, base, out, false, meta_open)?;
     Ok(Some(end - i))
 }
 
