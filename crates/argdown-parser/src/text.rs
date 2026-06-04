@@ -7,9 +7,9 @@ use argdown_core::{Inline, Metadata};
 use winnow::ModalResult;
 use winnow::Parser;
 use winnow::ascii::{digit1, line_ending, till_line_ending};
-use winnow::combinator::{alt, cut_err, eof, not, opt};
+use winnow::combinator::{alt, cut_err, eof, not, opt, peek};
 use winnow::error::{ContextError, ErrMode, StrContext};
-use winnow::token::{one_of, take_while};
+use winnow::token::{literal, one_of, take_while};
 
 use crate::Input;
 use crate::inline::scan_line;
@@ -249,9 +249,66 @@ pub(crate) fn definition_body(
     Ok((text, end, inlines, metadata))
 }
 
-/// Called right after a reference's closing bracket and `inline_ws`. Allows an
-/// optional trailing line comment, then requires end-of-line/EOF, then forbids
-/// a plain-text continuation line. Emits a hard `cut_err` at the offending text.
+/// Called right after a reference's closing bracket and `inline_ws`. Captures an
+/// optional trailing `{…}` metadata block (the only non-comment text allowed
+/// after a reference), then enforces the reference end-of-line/continuation
+/// guard. Returns the captured metadata, if any. A reference followed by plain
+/// text (anything other than a metadata block or a `//` comment) is still a hard
+/// error.
+pub(crate) fn finish_reference_with_metadata(
+    input: &mut Input<'_>,
+) -> ModalResult<Option<Metadata>> {
+    let metadata = reference_metadata(input)?;
+    finish_reference(input)?;
+    Ok(metadata)
+}
+
+/// If the rest of the current line opens a top-level metadata `{`, capture the
+/// block and consume it (leaving the cursor at the trailing trivia/comment for
+/// `finish_reference`). Only trivia may precede the `{`; only trivia or a `//`
+/// comment may follow the closing `}`. Returns `None` when no metadata block is
+/// present, leaving the input untouched.
+fn reference_metadata(input: &mut Input<'_>) -> ModalResult<Option<Metadata>> {
+    let (line, span) = peek(till_line_ending.with_span()).parse_next(input)?;
+    let open = match find_top_level_brace(line) {
+        Some(open) => open,
+        None => return Ok(None),
+    };
+    // Only trivia may sit between the reference and the metadata opener.
+    if !line[..open].trim().is_empty() {
+        return Err(ErrMode::Cut(ContextError::new()));
+    }
+    let m = capture_metadata(line, span.start, open)
+        .map_err(|_| ErrMode::<ContextError>::Cut(ContextError::new()))?;
+    // Consume the line up to and including the closing `}`.
+    // `consumed` is a byte length; use `literal` to advance by that exact byte
+    // slice rather than `take(n)` which would advance n *characters* and
+    // over-consume when the metadata block contains multibyte UTF-8 chars.
+    let consumed = m.span.end - span.start;
+    literal(&line[..consumed]).void().parse_next(input)?;
+    inline_ws.parse_next(input)?;
+    Ok(Some(m))
+}
+
+/// Byte index of the first unescaped (top-level) `{` in `s`, or `None`. `\{` is
+/// literal, matching the metadata scanner's escape rule.
+fn find_top_level_brace(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < s.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'{' => return Some(i),
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+/// Called right after a reference's closing bracket and `inline_ws` (and any
+/// trailing metadata block). Allows an optional trailing line comment, then
+/// requires end-of-line/EOF, then forbids a plain-text continuation line. Emits
+/// a hard `cut_err` at the offending text.
 pub(crate) fn finish_reference(input: &mut Input<'_>) -> ModalResult<()> {
     opt(("//", till_line_ending).void()).parse_next(input)?;
     // No free text may follow the closing bracket on the same line.
