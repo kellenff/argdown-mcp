@@ -70,6 +70,7 @@ pub struct Inline {
     pub span: Span,
 }
 
+/// The kind of an inline element, with its extracted data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InlineKind {
     Bold,
