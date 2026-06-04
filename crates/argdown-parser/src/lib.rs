@@ -7,6 +7,7 @@
 mod argument;
 mod heading;
 mod inline;
+mod metadata;
 mod pcs;
 mod relation;
 mod statement;
