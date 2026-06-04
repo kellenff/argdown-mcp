@@ -5,6 +5,7 @@
 //! Grows by increment.
 
 mod argument;
+mod frontmatter;
 mod heading;
 mod inline;
 mod metadata;
