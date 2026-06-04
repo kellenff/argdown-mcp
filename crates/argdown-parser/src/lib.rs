@@ -1014,6 +1014,20 @@ mod tests {
     }
 
     #[test]
+    fn inference_metadata_splits_from_rules() {
+        let pcs = only_pcs("(1) p\n-- Modus Ponens {uses: [1,2]} --\n(2) q");
+        match &pcs.items[1] {
+            PcsItem::Inference {
+                rules, metadata, ..
+            } => {
+                assert_eq!(rules, &vec!["Modus Ponens".to_string()]);
+                assert_eq!(metadata.as_ref().unwrap().raw, "uses: [1,2]");
+            }
+            other => panic!("expected an inference item, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn crlf_multi_line_metadata_block() {
         let src = "[S]: text {\r\n  a: b\r\n  c: d\r\n}";
         let blocks = parse(src).unwrap().blocks;
