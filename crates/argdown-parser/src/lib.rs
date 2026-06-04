@@ -175,6 +175,39 @@ mod tests {
     }
 
     #[test]
+    fn inline_escape_suppresses_emphasis() {
+        let s = only_statement(r"this \*is not\* italic");
+        assert!(s.inlines.is_empty());
+    }
+
+    #[test]
+    fn prose_with_stray_delimiters_stays_literal() {
+        for src in [
+            "cost is 5 * 3 dollars",
+            "use snake_case names",
+            "item # 4 here",
+        ] {
+            let s = only_statement(src);
+            assert!(s.inlines.is_empty(), "{src:?} should have no inlines");
+        }
+    }
+
+    #[test]
+    fn unclosed_emphasis_is_an_error() {
+        assert!(parse("this is **bold with no close").is_err());
+    }
+
+    #[test]
+    fn link_without_closing_paren_is_an_error() {
+        assert!(parse("see [text](http://x.com here").is_err());
+    }
+
+    #[test]
+    fn parenthesized_tag_without_close_is_an_error() {
+        assert!(parse("flagged #(multi word here").is_err());
+    }
+
+    #[test]
     fn no_space_after_underscore_is_italic_statement_not_undercut() {
         // `_emphasis_` (no space after the `_`) is an italic statement, while
         // `+ [B]` (space after the operator) is still a relation. The trailing
