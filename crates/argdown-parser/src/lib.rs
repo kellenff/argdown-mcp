@@ -41,7 +41,10 @@ pub fn parse(source: &str) -> Result<Document, Error> {
 fn document(input: &mut Input<'_>) -> ModalResult<Document> {
     skip_trivia(input)?;
     let blocks: Vec<Block> = repeat(0.., terminated(block, skip_trivia)).parse_next(input)?;
-    Ok(Document { blocks })
+    Ok(Document {
+        blocks,
+        frontmatter: None,
+    })
 }
 
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
@@ -237,6 +240,7 @@ mod tests {
                     inlines: vec![],
                     metadata: None,
                 })],
+                frontmatter: None,
             })
         );
     }
@@ -254,6 +258,7 @@ mod tests {
                     inlines: vec![],
                     metadata: None,
                 })],
+                frontmatter: None,
             })
         );
     }
@@ -271,6 +276,7 @@ mod tests {
                     inlines: vec![],
                     metadata: None,
                 })],
+                frontmatter: None,
             })
         );
     }

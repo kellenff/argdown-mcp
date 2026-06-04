@@ -18,10 +18,14 @@ impl From<Range<usize>> for Span {
     }
 }
 
-/// A parsed Argdown document: a flat sequence of top-level blocks.
+/// A parsed Argdown document: optional `===…===` frontmatter plus a flat
+/// sequence of top-level blocks.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Document {
     pub blocks: Vec<Block>,
+    /// The leading `===…===` YAML frontmatter block, if present. Raw content +
+    /// span; the YAML is not parsed here (a Layer-B utility does that).
+    pub frontmatter: Option<Metadata>,
 }
 
 /// A top-level block.
@@ -176,6 +180,12 @@ mod tests {
 
     #[test]
     fn document_default_is_empty() {
-        assert_eq!(Document::default(), Document { blocks: vec![] });
+        assert_eq!(
+            Document::default(),
+            Document {
+                blocks: vec![],
+                frontmatter: None,
+            }
+        );
     }
 }
