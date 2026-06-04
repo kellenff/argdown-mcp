@@ -9,7 +9,9 @@ use winnow::combinator::{alt, delimited, eof, not, opt};
 use winnow::token::take_till;
 
 use crate::Input;
-use crate::text::{body_lines, definition_body, finish_reference, inline_ws, process_body};
+use crate::text::{
+    body_lines, definition_body, finish_reference_with_metadata, inline_ws, process_body,
+};
 use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Parse one statement: a bracketed definition/reference, or plain text.
@@ -36,14 +38,18 @@ fn bracketed_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
         })
     } else {
         inline_ws.parse_next(input)?;
-        finish_reference(input)?;
+        let metadata = finish_reference_with_metadata(input)?;
+        let end = metadata.as_ref().map_or(span.end, |m| m.span.end);
         Ok(Statement {
             title: Some(title),
             text: String::new(),
             is_reference: true,
-            span: span.into(),
+            span: Span {
+                start: span.start,
+                end,
+            },
             inlines: vec![],
-            metadata: None,
+            metadata,
         })
     }
 }

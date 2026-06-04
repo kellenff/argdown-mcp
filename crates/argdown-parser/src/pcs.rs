@@ -120,6 +120,11 @@ fn ruled_divider(input: &mut Input<'_>) -> ModalResult<(Vec<String>, Option<Meta
             let base = content_span.start + 2;
             let m = capture_metadata(inner, base, open)
                 .map_err(|_| ErrMode::<ContextError>::Cut(ContextError::new()))?;
+            // Only trivia may sit between the closing `}` and the closing `--`.
+            let after = m.span.end - base;
+            if !inner[after..].trim().is_empty() {
+                return Err(ErrMode::Cut(ContextError::new()));
+            }
             (&inner[..open], Some(m))
         }
         None => (inner, None),

@@ -1040,4 +1040,53 @@ mod tests {
             other => panic!("expected a statement, got {other:?}"),
         }
     }
+
+    #[test]
+    fn text_after_metadata_is_an_error() {
+        assert!(parse("[S]: the set {a} more text").is_err());
+    }
+
+    #[test]
+    fn unterminated_metadata_is_an_error() {
+        assert!(parse("[S]: text {a: b").is_err());
+    }
+
+    #[test]
+    fn escaped_brace_is_literal() {
+        let s = only_statement(r"[S]: a \{ literal brace");
+        assert!(s.metadata.is_none());
+        assert!(s.text.contains('{'));
+    }
+
+    #[test]
+    fn plain_statement_metadata() {
+        let s = only_statement("a plain claim {k: v}");
+        assert_eq!(s.text, "a plain claim");
+        assert_eq!(s.metadata.unwrap().raw, "k: v");
+    }
+
+    #[test]
+    fn reference_with_metadata() {
+        let s = only_statement("[T] {k: v}");
+        assert!(s.is_reference);
+        assert_eq!(s.metadata.unwrap().raw, "k: v");
+    }
+
+    #[test]
+    fn inference_text_after_metadata_is_an_error() {
+        assert!(parse("(1) p\n-- MP {m} extra --\n(2) q").is_err());
+    }
+
+    #[test]
+    fn reference_metadata_with_multibyte_content() {
+        // The metadata block contains a multibyte char; the element must still be
+        // recognized as a reference (not misparsed as a plain statement).
+        let s = only_statement("[T] {nóte: x}");
+        assert!(s.is_reference, "should be a reference statement");
+        let blocks = parse("<A> {nóte: x}").unwrap().blocks;
+        assert!(
+            matches!(&blocks[0], Block::Argument(a) if a.is_reference),
+            "should be a reference argument"
+        );
+    }
 }

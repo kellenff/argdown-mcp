@@ -9,7 +9,7 @@ use winnow::combinator::{delimited, opt};
 use winnow::token::take_till;
 
 use crate::Input;
-use crate::text::{definition_body, finish_reference, inline_ws};
+use crate::text::{definition_body, finish_reference_with_metadata, inline_ws};
 
 /// `<Title>: description` (definition) or `<Title>` (reference). Once
 /// `<Title>` is consumed the branch is committed; trailing text is an error.
@@ -30,14 +30,18 @@ pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
         })
     } else {
         inline_ws.parse_next(input)?;
-        finish_reference(input)?;
+        let metadata = finish_reference_with_metadata(input)?;
+        let end = metadata.as_ref().map_or(span.end, |m| m.span.end);
         Ok(Argument {
             title,
             description: String::new(),
             is_reference: true,
-            span: span.into(),
+            span: Span {
+                start: span.start,
+                end,
+            },
             inlines: vec![],
-            metadata: None,
+            metadata,
         })
     }
 }
