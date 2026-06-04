@@ -352,6 +352,36 @@ mod tests {
     }
 
     #[test]
+    fn heading_metadata() {
+        let blocks = parse("# Title {k: v}").unwrap().blocks;
+        match &blocks[0] {
+            Block::Heading(h) => {
+                assert_eq!(h.text, "Title");
+                assert_eq!(h.metadata.as_ref().unwrap().raw, "k: v");
+            }
+            other => panic!("expected a heading, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn heading_metadata_span_is_absolute() {
+        let src = "\n# Title {k: v}"; // '{' at byte 9, '}' at byte 14
+        let blocks = parse(src).unwrap().blocks;
+        match &blocks[0] {
+            Block::Heading(h) => {
+                let m = h.metadata.as_ref().unwrap();
+                assert_eq!(&src[m.span.start..m.span.end], "{k: v}");
+            }
+            other => panic!("expected a heading, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn heading_text_after_metadata_is_an_error() {
+        assert!(parse("# Title {k: v} garbage").is_err());
+    }
+
+    #[test]
     fn heading_level_one() {
         assert_eq!(
             parse("# Title").unwrap().blocks,
