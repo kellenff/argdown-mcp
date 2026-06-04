@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use argdown_core::Inline;
+use argdown_core::{Inline, Metadata};
 use winnow::ModalResult;
 use winnow::Parser;
 use winnow::ascii::{digit1, line_ending, till_line_ending};
@@ -13,6 +13,7 @@ use winnow::token::{one_of, take_while};
 
 use crate::Input;
 use crate::inline::scan_line;
+use crate::metadata::capture_metadata;
 use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Consume run of spaces and tabs (no line breaks).
@@ -81,15 +82,33 @@ pub(crate) fn content_line<'s>(input: &mut Input<'s>) -> ModalResult<(&'s str, R
 }
 
 /// Scan one raw body line (`text`, absolute start `base`); append its inlines to
-/// `out` and return the comment-stripped content slice for normalization.
+/// `out` and return the content slice (comment- and metadata-stripped) for
+/// normalization. If the line opens a single-line metadata `{…}` block, capture
+/// it into `meta` (only trivia — whitespace or a `//` comment — may follow the
+/// closing `}`, else a hard error).
 pub(crate) fn body_line<'s>(
     text: &'s str,
     base: usize,
     out: &mut Vec<Inline>,
+    meta: &mut Option<Metadata>,
 ) -> ModalResult<&'s str> {
     match scan_line(text, base) {
-        Ok((mut inlines, content_len)) => {
+        Ok((mut inlines, content_len, meta_open)) => {
             out.append(&mut inlines);
+            if let Some(open) = meta_open {
+                match capture_metadata(text, base, open) {
+                    Ok(m) => {
+                        let end_in_line = m.span.end - base;
+                        // Only trivia may follow the closing `}` on this line.
+                        let tail = text[end_in_line..].trim_start();
+                        if !(tail.is_empty() || tail.starts_with("//")) {
+                            return Err(ErrMode::Cut(ContextError::new()));
+                        }
+                        *meta = Some(m);
+                    }
+                    Err(_) => return Err(ErrMode::Cut(ContextError::new())),
+                }
+            }
             Ok(&text[..content_len])
         }
         Err(_) => Err(ErrMode::Cut(ContextError::new())),
@@ -109,21 +128,30 @@ pub(crate) fn normalize_contents<'a>(contents: impl IntoIterator<Item = &'a str>
 }
 
 /// Read a definition body: remainder of the current line plus continuation
-/// lines. Returns the normalized text, the body's end offset, and the inlines.
-pub(crate) fn definition_body(input: &mut Input<'_>) -> ModalResult<(String, usize, Vec<Inline>)> {
+/// lines. Returns the normalized text, the body's end offset, the inlines, and
+/// any single-line trailing `{…}` metadata.
+pub(crate) fn definition_body(
+    input: &mut Input<'_>,
+) -> ModalResult<(String, usize, Vec<Inline>, Option<Metadata>)> {
     let (first, first_span) = till_line_ending.with_span().parse_next(input)?;
     opt(line_ending).parse_next(input)?;
     let rest: Vec<(&str, Range<usize>)> = repeat(0.., content_line).parse_next(input)?;
     let end = rest.last().map_or(first_span.end, |(_, span)| span.end);
 
     let mut inlines = Vec::new();
+    let mut metadata: Option<Metadata> = None;
     let mut contents: Vec<&str> = Vec::new();
-    contents.push(body_line(first, first_span.start, &mut inlines)?);
+    contents.push(body_line(
+        first,
+        first_span.start,
+        &mut inlines,
+        &mut metadata,
+    )?);
     for (line, span) in &rest {
-        contents.push(body_line(line, span.start, &mut inlines)?);
+        contents.push(body_line(line, span.start, &mut inlines, &mut metadata)?);
     }
     let text = normalize_contents(contents);
-    Ok((text, end, inlines))
+    Ok((text, end, inlines, metadata))
 }
 
 /// Called right after a reference's closing bracket and `inline_ws`. Allows an

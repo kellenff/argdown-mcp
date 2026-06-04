@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use argdown_core::{Inline, Span, Statement};
+use argdown_core::{Inline, Metadata, Span, Statement};
 use winnow::ModalResult;
 use winnow::Parser;
 use winnow::ascii::{line_ending, till_line_ending};
@@ -25,7 +25,7 @@ pub(crate) fn statement(input: &mut Input<'_>) -> ModalResult<Statement> {
 fn bracketed_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
     let (title, span) = statement_title.parse_next(input)?;
     if opt(':').parse_next(input)?.is_some() {
-        let (text, end, inlines) = definition_body(input)?;
+        let (text, end, inlines, metadata) = definition_body(input)?;
         Ok(Statement {
             title: Some(title),
             text,
@@ -35,7 +35,7 @@ fn bracketed_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
                 end,
             },
             inlines,
-            metadata: None,
+            metadata,
         })
     } else {
         inline_ws.parse_next(input)?;
@@ -75,10 +75,16 @@ fn plain_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
     let end = rest.last().map_or(first_span.end, |(_, span)| span.end);
 
     let mut inlines: Vec<Inline> = Vec::new();
+    let mut metadata: Option<Metadata> = None;
     let mut contents: Vec<&str> = Vec::new();
-    contents.push(body_line(first, first_span.start, &mut inlines)?);
+    contents.push(body_line(
+        first,
+        first_span.start,
+        &mut inlines,
+        &mut metadata,
+    )?);
     for (line, span) in &rest {
-        contents.push(body_line(line, span.start, &mut inlines)?);
+        contents.push(body_line(line, span.start, &mut inlines, &mut metadata)?);
     }
     let text = normalize_contents(contents);
     Ok(Statement {
@@ -90,6 +96,6 @@ fn plain_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
             end,
         },
         inlines,
-        metadata: None,
+        metadata,
     })
 }

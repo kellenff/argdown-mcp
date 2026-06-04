@@ -943,4 +943,32 @@ mod tests {
         let s = only_statement("[T]: **b**");
         assert_eq!(s.inlines[0].span, Span { start: 5, end: 10 });
     }
+
+    #[test]
+    fn statement_definition_metadata() {
+        let s = only_statement("[S]: claim text {certainty: 0.8}");
+        assert_eq!(s.text, "claim text");
+        let m = s.metadata.expect("metadata");
+        assert_eq!(m.raw, "certainty: 0.8");
+    }
+
+    #[test]
+    fn argument_definition_metadata() {
+        let blocks = parse("<A>: a description {author: x}").unwrap().blocks;
+        match &blocks[0] {
+            Block::Argument(a) => {
+                assert_eq!(a.description, "a description");
+                assert_eq!(a.metadata.as_ref().unwrap().raw, "author: x");
+            }
+            other => panic!("expected an argument, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metadata_coexists_with_inline() {
+        let s = only_statement("[S]: a **bold** claim {k: v}");
+        assert_eq!(s.text, "a **bold** claim");
+        assert_eq!(s.inlines.len(), 1);
+        assert_eq!(s.metadata.unwrap().raw, "k: v");
+    }
 }
