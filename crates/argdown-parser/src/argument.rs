@@ -26,6 +26,7 @@ pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
                 end,
             },
             inlines,
+            metadata: None,
         })
     } else {
         inline_ws.parse_next(input)?;
@@ -36,6 +37,7 @@ pub(crate) fn argument(input: &mut Input<'_>) -> ModalResult<Argument> {
             is_reference: true,
             span: span.into(),
             inlines: vec![],
+            metadata: None,
         })
     }
 }

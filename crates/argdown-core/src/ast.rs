@@ -40,6 +40,7 @@ pub struct Heading {
     pub level: u8,
     pub text: String,
     pub span: Span,
+    pub metadata: Option<Metadata>,
 }
 
 /// A statement: plain text, a titled definition (`[T]: x`), or a reference (`[T]`).
@@ -50,6 +51,7 @@ pub struct Statement {
     pub is_reference: bool,
     pub span: Span,
     pub inlines: Vec<Inline>,
+    pub metadata: Option<Metadata>,
 }
 
 /// An argument: a titled definition (`<T>: desc`) or a reference (`<T>`).
@@ -60,6 +62,17 @@ pub struct Argument {
     pub is_reference: bool,
     pub span: Span,
     pub inlines: Vec<Inline>,
+    pub metadata: Option<Metadata>,
+}
+
+/// A trailing `{yaml}` metadata block: raw inner content + source span. The
+/// content is not YAML-parsed here (a Layer-B utility does that).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Metadata {
+    /// Inner content, verbatim (between `{` and `}`).
+    pub raw: String,
+    /// The whole `{…}` block, source range.
+    pub span: Span,
 }
 
 /// One inline element inside a statement/argument body. `span` is the full
@@ -143,7 +156,11 @@ pub enum PcsItem {
         span: Span,
     },
     /// `----` (bare → empty rules) or `-- Rule, Rule --` (ruled).
-    Inference { rules: Vec<String>, span: Span },
+    Inference {
+        rules: Vec<String>,
+        metadata: Option<Metadata>,
+        span: Span,
+    },
     /// An interspersed relation line, reusing the relation form (with indent).
     Relation(Relation),
 }

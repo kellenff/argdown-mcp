@@ -23,5 +23,6 @@ pub(crate) fn heading(input: &mut Input<'_>) -> ModalResult<Heading> {
         level,
         text: strip_trailing_line_comment(raw).trim().to_string(),
         span: span.into(),
+        metadata: None,
     })
 }

@@ -234,6 +234,7 @@ mod tests {
                     is_reference: false,
                     span: Span { start: 0, end: 12 },
                     inlines: vec![],
+                    metadata: None,
                 })],
             })
         );
@@ -250,6 +251,7 @@ mod tests {
                     is_reference: false,
                     span: Span { start: 0, end: 16 },
                     inlines: vec![],
+                    metadata: None,
                 })],
             })
         );
@@ -266,6 +268,7 @@ mod tests {
                     is_reference: false,
                     span: Span { start: 0, end: 17 },
                     inlines: vec![],
+                    metadata: None,
                 })],
             })
         );
@@ -287,6 +290,7 @@ mod tests {
                 is_reference: false,
                 span: Span { start: 0, end: 4 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -308,6 +312,7 @@ mod tests {
                 is_reference: true,
                 span: Span { start: 0, end: 3 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -322,6 +327,7 @@ mod tests {
                 is_reference: false,
                 span: Span { start: 0, end: 9 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -352,6 +358,7 @@ mod tests {
                 level: 1,
                 text: "Title".to_string(),
                 span: Span { start: 0, end: 7 },
+                metadata: None,
             })]
         );
     }
@@ -371,6 +378,7 @@ mod tests {
                         start: 0,
                         end: source.len(),
                     },
+                    metadata: None,
                 })]
             );
         }
@@ -400,6 +408,7 @@ mod tests {
                     },
                     span: Span { start: 0, end: 8 },
                 }],
+                metadata: None,
             })]
         );
     }
@@ -420,6 +429,7 @@ mod tests {
                 is_reference: false,
                 span: Span { start: 0, end: 10 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -441,6 +451,7 @@ mod tests {
                 is_reference: false,
                 span: Span { start: 11, end: 12 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -467,6 +478,7 @@ mod tests {
                 is_reference: false,
                 span: Span { start: 0, end: 9 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -481,6 +493,7 @@ mod tests {
                 is_reference: false,
                 span: Span { start: 0, end: 12 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -495,6 +508,7 @@ mod tests {
                 is_reference: true,
                 span: Span { start: 0, end: 3 },
                 inlines: vec![],
+                metadata: None,
             })]
         );
     }
@@ -566,6 +580,7 @@ mod tests {
                     is_reference: true,
                     span: Span { start: 2, end: 5 },
                     inlines: vec![],
+                    metadata: None,
                 }),
                 span: Span { start: 0, end: 5 },
             })]

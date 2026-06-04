@@ -35,6 +35,7 @@ fn bracketed_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
                 end,
             },
             inlines,
+            metadata: None,
         })
     } else {
         inline_ws.parse_next(input)?;
@@ -45,6 +46,7 @@ fn bracketed_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
             is_reference: true,
             span: span.into(),
             inlines: vec![],
+            metadata: None,
         })
     }
 }
@@ -88,5 +90,6 @@ fn plain_statement(input: &mut Input<'_>) -> ModalResult<Statement> {
             end,
         },
         inlines,
+        metadata: None,
     })
 }

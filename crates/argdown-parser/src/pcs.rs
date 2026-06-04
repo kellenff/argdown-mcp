@@ -75,6 +75,7 @@ fn inference_item(input: &mut Input<'_>) -> ModalResult<PcsItem> {
     opt(line_ending).parse_next(input)?;
     Ok(PcsItem::Inference {
         rules,
+        metadata: None,
         span: span.into(),
     })
 }
