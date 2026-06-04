@@ -1,7 +1,8 @@
 //! Document frontmatter recognition: a leading `===…===` block whose inner
 //! content is captured raw (YAML not parsed here). `fence_marker` is the single
-//! definition of a fence line, reused for the open fence, the close fence, and
-//! the `at_content_line` / `block()` guards that keep fences at document start.
+//! definition of a fence line; `fence_line` exposes it for the open fence, the
+//! close fence, and (once wired) the `at_content_line` / `block()` guards that
+//! keep fences at the document start.
 
 use std::ops::Range;
 
@@ -28,8 +29,9 @@ fn fence_marker(input: &mut Input<'_>) -> ModalResult<Range<usize>> {
     Ok(span)
 }
 
-/// Lookahead form of `fence_marker`: succeeds (consuming the line) when the
-/// current line is a fence line. Used via `not(fence_line)` / `peek(fence_line)`.
+/// Unit-result wrapper around `fence_marker`: succeeds (consuming the fence
+/// line) when the current line is a fence line. Callers use `not(fence_line)` to
+/// stop before a fence and `peek(fence_line)` to test without advancing.
 pub(crate) fn fence_line(input: &mut Input<'_>) -> ModalResult<()> {
     fence_marker(input)?;
     Ok(())
@@ -93,7 +95,10 @@ mod tests {
         let src = "===\ntitle: X\nauthor: Y\n===\n";
         let mut input = Input::new(src);
         let m = frontmatter(&mut input).unwrap();
-        assert_eq!(&src[m.span.start..m.span.end], "===\ntitle: X\nauthor: Y\n===");
+        assert_eq!(
+            &src[m.span.start..m.span.end],
+            "===\ntitle: X\nauthor: Y\n==="
+        );
     }
 
     #[test]
@@ -144,5 +149,12 @@ mod tests {
     fn eof_immediately_after_close_is_ok() {
         // No trailing newline at all after the closing fence.
         assert!(run_frontmatter("===\na: b\n===").is_ok());
+    }
+
+    #[test]
+    fn content_immediately_after_close_is_an_error() {
+        // A blank line (or EOF) must follow the close fence; immediate content
+        // on the next line is the missing-paragraph-break hard error.
+        assert!(run_frontmatter("===\na: b\n===\nnext paragraph").is_err());
     }
 }
