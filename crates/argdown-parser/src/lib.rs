@@ -18,10 +18,11 @@ mod trivia;
 use argdown_core::{Block, Document, Error};
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::combinator::{alt, repeat, terminated};
+use winnow::combinator::{alt, opt, repeat, terminated};
 use winnow::stream::LocatingSlice;
 
 use argument::argument;
+use frontmatter::frontmatter;
 use heading::heading;
 use pcs::pcs;
 use relation::relation;
@@ -41,11 +42,10 @@ pub fn parse(source: &str) -> Result<Document, Error> {
 
 fn document(input: &mut Input<'_>) -> ModalResult<Document> {
     skip_trivia(input)?;
+    let frontmatter = opt(frontmatter).parse_next(input)?;
+    skip_trivia(input)?;
     let blocks: Vec<Block> = repeat(0.., terminated(block, skip_trivia)).parse_next(input)?;
-    Ok(Document {
-        blocks,
-        frontmatter: None,
-    })
+    Ok(Document { blocks, frontmatter })
 }
 
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
@@ -1104,5 +1104,54 @@ mod tests {
             matches!(&blocks[0], Block::Argument(a) if a.is_reference),
             "should be a reference argument"
         );
+    }
+
+    #[test]
+    fn frontmatter_at_document_start() {
+        let doc = parse("===\ntitle: X\nauthor: Y\n===\n\n[S]: claim").unwrap();
+        let fm = doc.frontmatter.as_ref().expect("frontmatter");
+        assert_eq!(fm.raw, "title: X\nauthor: Y\n");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(&doc.blocks[0], Block::Statement(s) if s.title.as_deref() == Some("S")));
+    }
+
+    #[test]
+    fn frontmatter_span_is_absolute_after_leading_blank_line() {
+        let src = "\n\n===\ntitle: X\n===\n\n[S]: claim";
+        let doc = parse(src).unwrap();
+        let fm = doc.frontmatter.as_ref().expect("frontmatter");
+        assert_eq!(&src[fm.span.start..fm.span.end], "===\ntitle: X\n===");
+    }
+
+    #[test]
+    fn leading_comment_before_frontmatter_is_fine() {
+        let doc = parse("// hello\n===\ntitle: X\n===\n\n[S]: claim").unwrap();
+        assert!(doc.frontmatter.is_some());
+        assert_eq!(doc.blocks.len(), 1);
+    }
+
+    #[test]
+    fn document_without_frontmatter_has_none() {
+        let doc = parse("[S]: claim").unwrap();
+        assert!(doc.frontmatter.is_none());
+    }
+
+    #[test]
+    fn frontmatter_only_document_has_no_blocks() {
+        let doc = parse("===\ntitle: X\n===\n").unwrap();
+        assert!(doc.frontmatter.is_some());
+        assert!(doc.blocks.is_empty());
+    }
+
+    #[test]
+    fn content_immediately_after_close_fence_is_an_error() {
+        // D3: a blank line (or EOF) must follow the closing fence.
+        assert!(parse("===\ntitle: X\n===\n[S]: claim").is_err());
+    }
+
+    #[test]
+    fn unterminated_frontmatter_is_an_error() {
+        // D4: opening fence with no closing fence before EOF.
+        assert!(parse("===\ntitle: X\n[S]: claim").is_err());
     }
 }
