@@ -1052,6 +1052,15 @@ mod tests {
     }
 
     #[test]
+    fn backslash_inside_metadata_block_is_literal_content() {
+        // `\}` inside a block does NOT escape the `}`: the block closes at the
+        // `}`, and raw is verbatim (YAML decides escaping later).
+        let s = only_statement(r"[S]: text {a: \}");
+        let m = s.metadata.expect("metadata");
+        assert_eq!(m.raw, r"a: \");
+    }
+
+    #[test]
     fn escaped_brace_is_literal() {
         let s = only_statement(r"[S]: a \{ literal brace");
         assert!(s.metadata.is_none());

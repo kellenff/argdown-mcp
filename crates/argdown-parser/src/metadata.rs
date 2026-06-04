@@ -7,6 +7,22 @@ use argdown_core::{Metadata, Span};
 #[derive(Debug)]
 pub(crate) struct MetaError;
 
+/// Byte index of the first top-level (unescaped) `{` in `s`, or `None`. `\{`
+/// outside quotes skips the `{`; inside a double-quoted string only `\"` is
+/// an escape (single-quoted strings treat `\` as literal).
+pub(crate) fn find_top_level_brace(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < s.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'{' => return Some(i),
+            _ => i += 1,
+        }
+    }
+    None
+}
+
 /// Capture the balanced `{…}` block in `src` that starts at byte index `open`
 /// (`src[open]` must be `{`). `base` is the absolute source offset of `src[0]`.
 /// Brace depth is tracked while skipping over quoted strings (`"…"`, `'…'`), so
