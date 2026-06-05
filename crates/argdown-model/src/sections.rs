@@ -212,4 +212,37 @@ mod tests {
             vec![Some(SectionId(0)), Some(SectionId(0)), Some(SectionId(0))]
         );
     }
+
+    #[test]
+    fn heading_pops_multiple_levels_then_nests_under_shallower_ancestor() {
+        // # A / ## B / ### C / ## D : "## D" pops C (l3) and B (l2), then nests under A (l1).
+        // Blocks: [H1 A, H2 B, H3 C, H2 D]
+        let doc = parse("# A\n\n## B\n\n### C\n\n## D").unwrap();
+        let s = build_sections(&doc);
+
+        assert_eq!(s.sections.len(), 4);
+        assert_eq!(s.roots, vec![SectionId(0)]);
+        // A (0): root; children B (1) and D (3), in source order.
+        assert_eq!(s.sections[0].parent, None);
+        assert_eq!(s.sections[0].children, vec![SectionId(1), SectionId(3)]);
+        // B (1): parent A; child C (2).
+        assert_eq!(s.sections[1].parent, Some(SectionId(0)));
+        assert_eq!(s.sections[1].children, vec![SectionId(2)]);
+        // C (2): parent B; no children.
+        assert_eq!(s.sections[2].parent, Some(SectionId(1)));
+        assert!(s.sections[2].children.is_empty());
+        // D (3): parent A (B and C were popped); no children.
+        assert_eq!(s.sections[3].parent, Some(SectionId(0)));
+        assert!(s.sections[3].children.is_empty());
+
+        assert_eq!(
+            s.block_sections,
+            vec![
+                Some(SectionId(0)),
+                Some(SectionId(1)),
+                Some(SectionId(2)),
+                Some(SectionId(3)),
+            ]
+        );
+    }
 }
