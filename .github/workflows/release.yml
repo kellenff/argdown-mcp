@@ -1,0 +1,122 @@
+name: release
+
+# Publish a GitHub Release with cross-compiled `argdown-mcp` binaries.
+# Runs on every push to main, but only releases when the workspace version in
+# Cargo.toml has not yet been released (see the `guard` job).
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Release v$version already exists; nothing to publish."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Version v$version is new; will build and release."
+          fi
+
+  build:
+    needs: guard
+    if: needs.guard.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-15-intel # Intel macOS
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Test
+        run: cargo test --workspace --locked
+      - name: Build
+        run: cargo build --release --locked -p argdown-mcp --target ${{ matrix.target }}
+      - name: Stage binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          IS_WINDOWS: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          set -euo pipefail
+          ext=""
+          [ "$IS_WINDOWS" = "true" ] && ext=".exe"
+          mkdir staging
+          cp "target/${TARGET}/release/argdown-mcp${ext}" "staging/argdown-mcp${ext}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: staging/
+          if-no-files-found: error
+
+  release:
+    needs: [guard, build]
+    if: needs.guard.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package archives + checksums
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir dist
+          for dir in artifacts/*/; do
+            target="$(basename "$dir")"
+            name="argdown-mcp-v${VERSION}-${target}"
+            if [[ "$target" == *windows* ]]; then
+              (cd "$dir" && zip -q -r "${GITHUB_WORKSPACE}/dist/${name}.zip" .)
+            else
+              tar -czf "dist/${name}.tar.gz" -C "$dir" .
+            fi
+          done
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          ls -l dist
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "v${VERSION}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "v${VERSION}" \
+            --generate-notes \
+            dist/*
