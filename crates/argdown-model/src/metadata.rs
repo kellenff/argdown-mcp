@@ -26,9 +26,30 @@ pub struct MetadataError {
 /// Element metadata and document frontmatter both flow through this
 /// function — the parser produces the same `Metadata { raw, span }` shape
 /// for both, so B2 does not distinguish them.
-pub fn parse_metadata(_meta: &Metadata) -> Result<Value, MetadataError> {
-    Err(MetadataError {
-        message: "parse_metadata: not yet implemented".to_string(),
-        offset: 0,
+pub fn parse_metadata(meta: &Metadata) -> Result<Value, MetadataError> {
+    noyalib::compat::serde_yaml::from_str(&meta.raw).map_err(|e| MetadataError {
+        message: e.to_string(),
+        offset: e.location().map_or(0, |m| m.index()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use argdown_core::{Metadata, Span};
+
+    #[test]
+    fn parses_mapping_root() {
+        // B2 sees the raw content between the braces; for "{k: v}" the
+        // captured Metadata.raw is the string "k: v".
+        let meta = Metadata {
+            raw: "k: v".to_string(),
+            span: Span { start: 0, end: 0 },
+        };
+        let v = parse_metadata(&meta).unwrap();
+        assert!(
+            matches!(v, Value::Mapping(_)),
+            "expected Value::Mapping, got {v:?}"
+        );
+    }
 }
