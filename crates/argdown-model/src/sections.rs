@@ -145,4 +145,71 @@ mod tests {
             vec![Some(SectionId(0)), Some(SectionId(1)), Some(SectionId(2))]
         );
     }
+
+    #[test]
+    fn skipped_level_nests_under_nearest_shallower() {
+        // `#` then `#####`: the level-5 nests directly under the level-1.
+        let doc = parse("# Top\n\n##### Deep").unwrap();
+        let s = build_sections(&doc);
+
+        assert_eq!(s.sections.len(), 2);
+        assert_eq!(s.roots, vec![SectionId(0)]);
+        assert_eq!(s.sections[1].level, 5);
+        assert_eq!(s.sections[1].parent, Some(SectionId(0)));
+        assert_eq!(s.sections[0].children, vec![SectionId(1)]);
+    }
+
+    #[test]
+    fn two_top_level_headings_are_siblings() {
+        // Blocks: [Heading("A"), Statement("x"), Heading("B")]
+        let doc = parse("# A\n\nx\n\n# B").unwrap();
+        let s = build_sections(&doc);
+
+        assert_eq!(s.roots, vec![SectionId(0), SectionId(1)]);
+        assert_eq!(s.sections[0].parent, None);
+        assert_eq!(s.sections[1].parent, None);
+        assert!(s.sections[0].children.is_empty());
+        // x belongs to A; the second heading opens B.
+        assert_eq!(
+            s.block_sections,
+            vec![Some(SectionId(0)), Some(SectionId(0)), Some(SectionId(1))]
+        );
+    }
+
+    #[test]
+    fn content_before_the_first_heading_has_no_section() {
+        // Blocks: [Statement("intro"), Heading("Top"), Statement("[A]")]
+        let doc = parse("intro\n\n# Top\n\n[A]: claim").unwrap();
+        let s = build_sections(&doc);
+
+        assert_eq!(s.sections.len(), 1);
+        assert_eq!(
+            s.block_sections,
+            vec![None, Some(SectionId(0)), Some(SectionId(0))]
+        );
+    }
+
+    #[test]
+    fn document_with_no_headings_assigns_no_sections() {
+        // Blocks: [Statement, Statement]
+        let doc = parse("[A]: one\n\n[B]: two").unwrap();
+        let s = build_sections(&doc);
+
+        assert!(s.sections.is_empty());
+        assert!(s.roots.is_empty());
+        assert_eq!(s.block_sections, vec![None, None]);
+    }
+
+    #[test]
+    fn multiple_blocks_under_one_heading_share_its_section() {
+        // Blocks: [Heading, Statement, Statement]
+        let doc = parse("# Top\n\n[A]: one\n\n[B]: two").unwrap();
+        let s = build_sections(&doc);
+
+        assert_eq!(s.sections.len(), 1);
+        assert_eq!(
+            s.block_sections,
+            vec![Some(SectionId(0)), Some(SectionId(0)), Some(SectionId(0))]
+        );
+    }
 }
