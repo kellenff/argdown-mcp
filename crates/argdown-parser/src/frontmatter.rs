@@ -152,6 +152,21 @@ mod tests {
     }
 
     #[test]
+    fn open_and_close_fence_counts_are_independent() {
+        // D1: the open and close fences are matched independently, so their `=`
+        // counts need not agree.
+        let m = run_frontmatter("====\na: b\n===\n").unwrap();
+        assert_eq!(m.raw, "a: b\n");
+    }
+
+    #[test]
+    fn trailing_whitespace_then_eof_after_close_is_ok() {
+        // D3: a whitespace-only line after the close fence (then EOF) satisfies
+        // the trailing paragraph-break requirement.
+        assert!(run_frontmatter("===\na: b\n===\n   ").is_ok());
+    }
+
+    #[test]
     fn content_immediately_after_close_is_an_error() {
         // A blank line (or EOF) must follow the close fence; immediate content
         // on the next line is the missing-paragraph-break hard error.
