@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 argdown-core = { workspace = true }
+noyalib = { workspace = true }
 
 [dev-dependencies]
 argdown-parser = { workspace = true }
