@@ -11,3 +11,6 @@
 
 # Snowball blast-radius scratch (per-session; read by the audit hook)
 /.snowball/
+
+# JetBrains IDE project files
+/.idea/
