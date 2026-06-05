@@ -125,11 +125,13 @@ the corpus correctness check.
 ## Regression-guard workflow (local)
 
 ```bash
-cargo bench -p argdown-parser                          # auto-diffs vs last run → "change: +4.2% (p=0.00)"
-cargo bench -p argdown-parser -- --save-baseline main  # snapshot before a change
+cargo bench -p argdown-parser                                       # auto-diffs vs last run → "change: +4.2% (p=0.00)"
+cargo bench -p argdown-parser --bench parse -- --save-baseline main # snapshot before a change
 # …make parser changes…
-cargo bench -p argdown-parser -- --baseline main       # compare against the snapshot
+cargo bench -p argdown-parser --bench parse -- --baseline main      # compare against the snapshot
 ```
+
+`--bench parse` is required when forwarding Criterion-only flags (`--save-baseline`/`--baseline`): bare `cargo bench` also invokes the crate's default libtest harness, which rejects those flags. The plain run (no forwarded flags) needs no `--bench`.
 
 Baselines live in `target/criterion/` — already covered by the `/target`
 gitignore, so **no `.gitignore` change** and no committed golden numbers.

@@ -3,12 +3,15 @@
 //! Run the whole suite:
 //!     cargo bench -p argdown-parser
 //!
-//! Regression-guard workflow (baselines live in the gitignored `target/criterion`):
-//!     cargo bench -p argdown-parser -- --save-baseline main   # snapshot before a change
-//!     cargo bench -p argdown-parser -- --baseline main        # compare after
+//! Regression-guard workflow (baselines live in the gitignored `target/criterion`).
+//! Pass `--bench parse` so Criterion-only flags reach this bench and not the
+//! crate's default libtest harness (which rejects them):
+//!     cargo bench -p argdown-parser --bench parse -- --save-baseline main   # snapshot before a change
+//!     cargo bench -p argdown-parser --bench parse -- --baseline main        # compare after
 //!
-//! A plain `cargo bench -p argdown-parser` also auto-diffs against the previous
-//! run and prints e.g. `change: +4.2% (p = 0.00)` — that is the regression guard.
+//! A plain `cargo bench -p argdown-parser` (no forwarded flags) also auto-diffs
+//! against the previous run and prints e.g. `change: +4.2% (p = 0.00)` — that is
+//! the regression guard.
 //!
 //! For local HTML report plots, enable Criterion's `html_reports` feature on the
 //! dev-dependency in `crates/argdown-parser/Cargo.toml` (off by default to keep

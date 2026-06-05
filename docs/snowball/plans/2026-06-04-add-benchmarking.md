@@ -265,11 +265,13 @@ Expected: `fmt --check` prints nothing and exits 0; clippy prints no warnings; b
 
 ```bash
 cargo bench -p argdown-parser
-cargo bench -p argdown-parser -- --save-baseline main
-cargo bench -p argdown-parser -- --baseline main
+cargo bench -p argdown-parser --bench parse -- --save-baseline main
+cargo bench -p argdown-parser --bench parse -- --baseline main
 ```
 
 Expected: the first run prints all `features/*` and `scaling/*` results; `--save-baseline main` writes the `main` baseline under `target/criterion/`; `--baseline main` re-runs and reports `change: …` lines near 0% (no code changed between the two). This confirms the regression-guard workflow end to end.
+
+**Note (`--bench parse` is required for baseline flags):** bare `cargo bench -p argdown-parser` also runs the crate's default libtest harness, which rejects Criterion-only flags (`error: Unrecognized option: 'save-baseline'`). Targeting `--bench parse` sends those flags only to this Criterion bench. The plain run (no forwarded flags) works without it.
 
 - [ ] **Step 3: Confirm the working tree is clean**
 
