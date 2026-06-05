@@ -216,7 +216,10 @@ mod tests {
         // `title: X` mapping; capture the raw from Document.frontmatter;
         // parse it back and confirm the mapping has a `title` key.
         let doc = argdown_parser::parse("===\ntitle: X\nauthor: Y\n===\n\n# Top").unwrap();
-        let fm = doc.frontmatter.as_ref().expect("document should have frontmatter");
+        let fm = doc
+            .frontmatter
+            .as_ref()
+            .expect("document should have frontmatter");
         let v = parse_metadata(fm).unwrap();
         let Value::Mapping(map) = v else {
             panic!("expected Value::Mapping");
