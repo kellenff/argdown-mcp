@@ -27,15 +27,17 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 // regression names the exact recognizer that slowed.
 const HEADING: &str = "# A section heading at level one";
 const STATEMENT: &str = "[Claim]: A plain claim of representative length.";
+const ARGUMENT: &str = "<Argument>: A defended claim supported by reasons.";
 const RELATION: &str = "[A]\n  + [B]\n  - <C>\n    +> [D]\n  >< [E]";
 const PCS: &str = "(1) first premise\n(2) second premise\n-- Modus Ponens --\n(3) conclusion";
 const INLINE: &str = "Text with *italic*, **bold**, [a link](http://x.com), @[M], @<Arg>, #tag.";
 const METADATA: &str = "[S]: a claim with data {certainty: 0.8, source: book}";
 const FRONTMATTER: &str = "===\ntitle: Doc\nauthor: A\n===\n\n[S]: a claim";
 
-const FEATURES: [(&str, &str); 7] = [
+const FEATURES: [(&str, &str); 8] = [
     ("heading", HEADING),
     ("statement", STATEMENT),
+    ("argument", ARGUMENT),
     ("relation", RELATION),
     ("pcs", PCS),
     ("inline", INLINE),
@@ -59,9 +61,10 @@ fn features(c: &mut Criterion) {
 // reproducible as code rather than committed fixture blobs.
 
 /// Build a size-scaled corpus: document frontmatter once, then `units`
-/// representative blocks (heading; a claim carrying inline markup + metadata; a
-/// reference with a relation pair; a PCS). This unit is the intended
-/// customization point — adjust it to match a realistic Argdown document.
+/// representative blocks (heading; a claim carrying inline markup + metadata; an
+/// argument definition; a reference with a relation pair; a PCS). This unit is
+/// the intended customization point — adjust it to match a realistic Argdown
+/// document.
 fn corpus(units: usize) -> String {
     let mut s = String::from("===\ntitle: Benchmark Corpus\nauthor: bench\n===\n\n");
     for i in 0..units {
@@ -69,6 +72,7 @@ fn corpus(units: usize) -> String {
             "# Section {i}\n\n\
              [Claim {i}]: a claim with *italic*, **bold**, a [link](http://example.com/{i}), \
              @[Other {i}], @<Arg {i}> and a #tag {{certainty: 0.8}}\n\n\
+             <Argument {i}>: a defended claim supported by reasons.\n\n\
              [Parent {i}]\n  + [Support {i}]\n  - <Counter {i}>\n\n\
              (1) first premise\n(2) second premise\n-- Modus Ponens --\n(3) conclusion {i}\n\n"
         ));
