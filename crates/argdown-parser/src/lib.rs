@@ -45,7 +45,10 @@ fn document(input: &mut Input<'_>) -> ModalResult<Document> {
     let frontmatter = opt(frontmatter).parse_next(input)?;
     skip_trivia(input)?;
     let blocks: Vec<Block> = repeat(0.., terminated(block, skip_trivia)).parse_next(input)?;
-    Ok(Document { blocks, frontmatter })
+    Ok(Document {
+        blocks,
+        frontmatter,
+    })
 }
 
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
@@ -1126,7 +1129,8 @@ mod tests {
     #[test]
     fn leading_comment_before_frontmatter_is_fine() {
         let doc = parse("// hello\n===\ntitle: X\n===\n\n[S]: claim").unwrap();
-        assert!(doc.frontmatter.is_some());
+        let fm = doc.frontmatter.as_ref().expect("frontmatter");
+        assert_eq!(fm.raw, "title: X\n");
         assert_eq!(doc.blocks.len(), 1);
     }
 
