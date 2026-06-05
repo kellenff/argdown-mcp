@@ -13,9 +13,10 @@
 //! against the previous run and prints e.g. `change: +4.2% (p = 0.00)` — that is
 //! the regression guard.
 //!
-//! For local HTML report plots, enable Criterion's `html_reports` feature on the
-//! dev-dependency in `crates/argdown-parser/Cargo.toml` (off by default to keep
-//! the CI `--all-targets` compile lean).
+//! For local HTML report plots, add Criterion's `html_reports` and `plotters`
+//! features to the workspace dependency in the root `Cargo.toml` (we build with
+//! `default-features = false` to keep the CI `--all-targets` compile lean, so the
+//! plotting stack is not compiled by default).
 
 use std::hint::black_box;
 

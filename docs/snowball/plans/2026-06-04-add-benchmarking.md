@@ -40,7 +40,10 @@ In the root `Cargo.toml`, add `criterion` under the existing `[workspace.depende
 ```toml
 [workspace.dependencies]
 winnow = "1"
-criterion = "0.5"          # default features only — no html_reports/plotters, keeps CI compile lean
+# default-features off drops criterion's plotters + rayon (no SVG reports, no
+# parallel-bench runtime) so the CI `--all-targets` compile stays lean;
+# cargo_bench_support keeps `cargo bench` working.
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 argdown-core = { path = "crates/argdown-core" }
 argdown-parser = { path = "crates/argdown-parser" }
 ```

@@ -8,6 +8,9 @@ edition = "2024"
 
 [workspace.dependencies]
 winnow = "1"
-criterion = "0.5"
+# default-features off drops criterion's plotters + rayon (we want neither: no
+# SVG reports, no parallel-bench runtime) so the CI `--all-targets` compile stays
+# lean; cargo_bench_support is the feature that keeps `cargo bench` working.
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 argdown-core = { path = "crates/argdown-core" }
 argdown-parser = { path = "crates/argdown-parser" }

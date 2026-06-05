@@ -63,7 +63,8 @@ Version centralized the way `winnow` is (one canonical place):
 
 ```toml
 # root Cargo.toml → [workspace.dependencies]
-criterion = "0.5"          # default features only — no html_reports/plotters
+# default-features off drops plotters + rayon; cargo_bench_support keeps `cargo bench` working
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 
 # crates/argdown-parser/Cargo.toml
 [dev-dependencies]
@@ -74,10 +75,14 @@ name = "parse"
 harness = false
 ```
 
-`html_reports` is deliberately **off**: the regression guard is the terminal
-`% change`, not the SVG plots, and since CI compiles benches (`--all-targets`),
-omitting `plotters` keeps that cost down. A one-line comment in `parse.rs` notes
-how to enable it locally.
+The regression guard is the terminal `% change`, not the SVG plots, so we don't
+need Criterion's report/plot stack. Criterion 0.5's *default* features include
+`plotters` (HTML/SVG reports) and `rayon` — both of which would otherwise compile
+on every CI `--all-targets` run — so we set `default-features = false` and opt
+back in only to `cargo_bench_support` (the feature that lets `cargo bench` drive
+the suite). `html_reports` stays off as a consequence. A one-line comment in
+`parse.rs` notes how to re-enable reports locally (it requires adding the
+`html_reports`/`plotters` features back).
 
 ## Corpus (corpus-as-code)
 
