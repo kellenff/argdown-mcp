@@ -208,7 +208,7 @@ shape and the raw that B2 actually parses.
 6. sequence root: element `{[a, b, c]}` (raw `[a, b, c]`) → `Value::Sequence` with three entries
 7. mapping with multiple entries: element `{k: v\nn: 1}` (raw `k: v\nn: 1`) → `Value::Mapping` with two entries
 8. nested mapping: element `{a:\n  b: c}` (raw `a:\n  b: c`) → mapping containing a mapping
-9. empty raw: frontmatter `===…===\n===…===` with no body (raw `""`) → error
+9. empty raw: frontmatter `===…===\n===…===` with no body (raw `""`) → `Ok(Value::Null)` (empty input is valid YAML — the YAML 1.2 null document — not an error)
 10. invalid YAML: a raw with bad indentation (e.g. `"a: b\n  c: d"`) → error; the error's `offset` is between 0 and `raw.len()`
 11. element roundtrip: parse a heading with `{k: v}` metadata and confirm `parse_metadata` on the captured `Metadata` returns the expected mapping
 12. frontmatter roundtrip: parse a document with `===…===` frontmatter containing `title: X\nauthor: Y` and confirm `parse_metadata` on `Document.frontmatter` returns the expected mapping
