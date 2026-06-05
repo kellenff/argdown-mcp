@@ -12,9 +12,9 @@ use winnow::error::{ContextError, ErrMode, StrContext};
 use winnow::token::{literal, one_of, take_while};
 
 use crate::Input;
+use crate::frontmatter::fence_line;
 use crate::inline::scan_line;
 use crate::metadata::{capture_metadata, find_top_level_brace};
-use crate::frontmatter::fence_line;
 use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Consume run of spaces and tabs (no line breaks).
