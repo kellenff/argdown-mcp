@@ -17,7 +17,7 @@
 use std::hint::black_box;
 
 use argdown_parser::parse;
-use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 // Feature micros: one small valid document per grammar construct, so a
 // regression names the exact recognizer that slowed.
@@ -51,5 +51,41 @@ fn features(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, features);
+// Size scaling: one representative mixed "unit" repeated, so sizes are
+// reproducible as code rather than committed fixture blobs.
+
+/// Build a size-scaled corpus: document frontmatter once, then `units`
+/// representative blocks (heading; a claim carrying inline markup + metadata; a
+/// reference with a relation pair; a PCS). This unit is the intended
+/// customization point — adjust it to match a realistic Argdown document.
+fn corpus(units: usize) -> String {
+    let mut s = String::from("===\ntitle: Benchmark Corpus\nauthor: bench\n===\n\n");
+    for i in 0..units {
+        s.push_str(&format!(
+            "# Section {i}\n\n\
+             [Claim {i}]: a claim with *italic*, **bold**, a [link](http://example.com/{i}), \
+             @[Other {i}], @<Arg {i}> and a #tag {{certainty: 0.8}}\n\n\
+             [Parent {i}]\n  + [Support {i}]\n  - <Counter {i}>\n\n\
+             (1) first premise\n(2) second premise\n-- Modus Ponens --\n(3) conclusion {i}\n\n"
+        ));
+    }
+    s
+}
+
+const SIZES: [(&str, usize); 3] = [("small", 1), ("medium", 50), ("large", 500)];
+
+fn scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("scaling");
+    for (name, units) in SIZES {
+        let src = corpus(units);
+        assert!(parse(&src).is_ok(), "scaling corpus {name:?} must parse");
+        group.throughput(Throughput::Bytes(src.len() as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(name), &src, |b, src| {
+            b.iter(|| parse(black_box(src.as_str())))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, features, scaling);
 criterion_main!(benches);
