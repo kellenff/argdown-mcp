@@ -14,6 +14,7 @@ use winnow::token::{literal, one_of, take_while};
 use crate::Input;
 use crate::inline::scan_line;
 use crate::metadata::{capture_metadata, find_top_level_brace};
+use crate::frontmatter::fence_line;
 use crate::trivia::{blank_line, comment_start, heading_marker};
 
 /// Consume run of spaces and tabs (no line breaks).
@@ -67,6 +68,7 @@ fn at_content_line(input: &mut Input<'_>) -> ModalResult<()> {
         not(block_head),
         not(relation_marker),
         not(pcs_marker),
+        not(fence_line),
     )
         .void()
         .parse_next(input)
