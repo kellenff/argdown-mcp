@@ -1,0 +1,55 @@
+//! Criterion benchmarks for `argdown_parser::parse`.
+//!
+//! Run the whole suite:
+//!     cargo bench -p argdown-parser
+//!
+//! Regression-guard workflow (baselines live in the gitignored `target/criterion`):
+//!     cargo bench -p argdown-parser -- --save-baseline main   # snapshot before a change
+//!     cargo bench -p argdown-parser -- --baseline main        # compare after
+//!
+//! A plain `cargo bench -p argdown-parser` also auto-diffs against the previous
+//! run and prints e.g. `change: +4.2% (p = 0.00)` — that is the regression guard.
+//!
+//! For local HTML report plots, enable Criterion's `html_reports` feature on the
+//! dev-dependency in `crates/argdown-parser/Cargo.toml` (off by default to keep
+//! the CI `--all-targets` compile lean).
+
+use std::hint::black_box;
+
+use argdown_parser::parse;
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+
+// Feature micros: one small valid document per grammar construct, so a
+// regression names the exact recognizer that slowed.
+const HEADING: &str = "# A section heading at level one";
+const STATEMENT: &str = "[Claim]: A plain claim of representative length.";
+const RELATION: &str = "[A]\n  + [B]\n  - <C>\n    +> [D]\n  >< [E]";
+const PCS: &str = "(1) first premise\n(2) second premise\n-- Modus Ponens --\n(3) conclusion";
+const INLINE: &str = "Text with *italic*, **bold**, [a link](http://x.com), @[M], @<Arg>, #tag.";
+const METADATA: &str = "[S]: a claim with data {certainty: 0.8, source: book}";
+const FRONTMATTER: &str = "===\ntitle: Doc\nauthor: A\n===\n\n[S]: a claim";
+
+const FEATURES: [(&str, &str); 7] = [
+    ("heading", HEADING),
+    ("statement", STATEMENT),
+    ("relation", RELATION),
+    ("pcs", PCS),
+    ("inline", INLINE),
+    ("metadata", METADATA),
+    ("frontmatter", FRONTMATTER),
+];
+
+fn features(c: &mut Criterion) {
+    let mut group = c.benchmark_group("features");
+    for (name, src) in FEATURES {
+        // A malformed corpus would make parse() fail-fast, so we'd time the
+        // error path instead of parsing. Guard once, untimed.
+        assert!(parse(src).is_ok(), "feature corpus {name:?} must parse");
+        group.throughput(Throughput::Bytes(src.len() as u64));
+        group.bench_function(name, |b| b.iter(|| parse(black_box(src))));
+    }
+    group.finish();
+}
+
+criterion_group!(benches, features);
+criterion_main!(benches);
