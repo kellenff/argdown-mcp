@@ -18,11 +18,12 @@ mod trivia;
 use argdown_core::{Block, Document, Error};
 use winnow::ModalResult;
 use winnow::Parser;
-use winnow::combinator::{alt, opt, repeat, terminated};
+use winnow::combinator::{alt, opt, peek, repeat, terminated};
+use winnow::error::{ContextError, ErrMode};
 use winnow::stream::LocatingSlice;
 
 use argument::argument;
-use frontmatter::frontmatter;
+use frontmatter::{fence_line, frontmatter};
 use heading::heading;
 use pcs::pcs;
 use relation::relation;
@@ -53,6 +54,7 @@ fn document(input: &mut Input<'_>) -> ModalResult<Document> {
 
 fn block(input: &mut Input<'_>) -> ModalResult<Block> {
     alt((
+        misplaced_fence,
         heading.map(Block::Heading),
         relation.map(Block::Relation),
         pcs.map(Block::Pcs),
@@ -60,6 +62,14 @@ fn block(input: &mut Input<'_>) -> ModalResult<Block> {
         statement.map(Block::Statement),
     ))
     .parse_next(input)
+}
+
+/// A fence line reaching a block boundary is a misplaced frontmatter fence
+/// (frontmatter is only valid at document start) — a hard error. Backtracks when
+/// the line is not a fence so the normal block alternatives run.
+fn misplaced_fence(input: &mut Input<'_>) -> ModalResult<Block> {
+    peek(fence_line).parse_next(input)?;
+    Err(ErrMode::Cut(ContextError::new()))
 }
 
 #[cfg(test)]
@@ -1157,5 +1167,23 @@ mod tests {
     fn unterminated_frontmatter_is_an_error() {
         // D4: opening fence with no closing fence before EOF.
         assert!(parse("===\ntitle: X\n[S]: claim").is_err());
+    }
+
+    #[test]
+    fn fence_after_content_is_an_error() {
+        // D2: frontmatter is only valid at document start.
+        assert!(parse("[S]: x\n\n===\ntitle: X\n===\n").is_err());
+    }
+
+    #[test]
+    fn bare_fence_after_content_is_an_error() {
+        assert!(parse("a claim\n===").is_err());
+    }
+
+    #[test]
+    fn fence_does_not_get_absorbed_as_statement_continuation() {
+        // The continuation reader stops at the fence line; the fence then
+        // surfaces as the misplaced-fence error rather than joining the prose.
+        assert!(parse("first line\nsecond line\n===").is_err());
     }
 }
