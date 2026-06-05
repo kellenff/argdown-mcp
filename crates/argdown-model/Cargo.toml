@@ -1,0 +1,10 @@
+[package]
+name = "argdown-model"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argdown-core = { workspace = true }
+
+[dev-dependencies]
+argdown-parser = { workspace = true }

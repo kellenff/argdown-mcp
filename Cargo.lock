@@ -36,6 +36,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "argdown-model"
+version = "0.1.0"
+dependencies = [
+ "argdown-core",
+ "argdown-parser",
+]
+
+[[package]]
 name = "argdown-parser"
 version = "0.1.0"
 dependencies = [
