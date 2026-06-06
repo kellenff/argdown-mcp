@@ -1,4 +1,4 @@
-//! PCS resolution + the Model aggregate (Layer B, slice B4b).
+//! PCS resolution, dialectical edges, and the Model aggregate (Layer B, B4b + B5).
 //!
 //! Resolves each flat `Block::Pcs` into roles (premise / intermediary- /
 //! main-conclusion), binds each inference to its conclusion, and links each
@@ -8,17 +8,19 @@
 //! reference (`@argdown/core`) treats untitled PCS statements and standalone
 //! PCSs as first-class entities, this slice introduces the first Layer-B
 //! [`Model`] aggregate: the complete, unified statement and argument registries
-//! (titled + untitled; named + anonymous) plus the resolved PCSs.
+//! (titled + untitled; named + anonymous) plus the resolved PCSs. B5 also
+//! resolves dialectical relations into deduped directed [`Edge`]s between nodes.
 //!
 //! Pure and total — strictness is data ([`Model::issues`],
-//! [`Model::statement_conflicts`], [`Model::argument_conflicts`]), never a
-//! `Result`. Additive over B3/B4a, whose sources are untouched: `build_model`
-//! reuses [`crate::build_statements`] and [`crate::build_arguments`] for the
-//! seed registries and preserves their ids (prefix-correspondence).
+//! [`Model::statement_conflicts`], [`Model::argument_conflicts`],
+//! [`Model::relation_issues`]), never a `Result`. Additive over B3/B4a, whose
+//! sources are untouched: `build_model` reuses [`crate::build_statements`] and
+//! [`crate::build_arguments`] for the seed registries and preserves their ids
+//! (prefix-correspondence).
 
 use argdown_core::{
-    Block, Document, PcsItem, Relation, RelationDirection, RelationOperator, RelationTarget, Span,
-    Statement,
+    Argument, Block, Document, Metadata, PcsItem, Relation, RelationDirection, RelationOperator,
+    RelationTarget, Span, Statement,
 };
 use std::collections::HashMap;
 
@@ -191,185 +193,12 @@ pub struct Model {
 /// links it to its argument by strict adjacency (minting anonymous arguments
 /// for standalone PCSs), resolves each PCS statement to the unified registry
 /// (titled merged by title; untitled minted as singletons), assigns positional
-/// roles, and binds each inference to its conclusion. Total — malformations and
-/// conflicts are data.
+/// roles, binds each inference to its conclusion, and resolves dialectical
+/// relations into deduped edges. Total — malformations and conflicts are data.
 pub fn build_model(document: &Document) -> Model {
-    // Phase 1: seed the registries by reusing B3/B4a (prefix-correspondence).
-    let statements = crate::build_statements(document);
-    let arguments = crate::build_arguments(document);
-
-    let mut model_statements: Vec<ModelStatement> = statements
-        .statements
-        .iter()
-        .map(|s| ModelStatement {
-            id: s.id,
-            title: Some(s.title.clone()),
-            canonical_text: s.canonical_text.clone(),
-            canonical_metadata: s.canonical_metadata.clone(),
-        })
-        .collect();
-    let mut by_title_stmt: HashMap<String, StatementId> = model_statements
-        .iter()
-        .filter_map(|s| s.title.clone().map(|t| (t, s.id)))
-        .collect();
-
-    let mut model_arguments: Vec<ModelArgument> = arguments
-        .arguments
-        .iter()
-        .map(|a| ModelArgument {
-            id: a.id,
-            title: Some(a.title.clone()),
-            canonical_description: a.canonical_description.clone(),
-            canonical_metadata: a.canonical_metadata.clone(),
-            pcs: None,
-        })
-        .collect();
-    let mut by_title_arg: HashMap<String, ArgumentId> = model_arguments
-        .iter()
-        .filter_map(|a| a.title.clone().map(|t| (t, a.id)))
-        .collect();
-
-    // Conflicts seeded from B3/B4a; statement conflicts extended with PCS
-    // redefinitions below. `conflict_idx` finds an existing per-title conflict
-    // to append to; `canonical_spans` holds each title's first-definition span.
-    let mut statement_conflicts = statements.conflicts.clone();
-    let argument_conflicts = arguments.conflicts.clone();
-    let mut conflict_idx: HashMap<String, usize> = statement_conflicts
-        .iter()
-        .enumerate()
-        .map(|(i, c)| (c.title.clone(), i))
-        .collect();
-    let mut canonical_spans: HashMap<String, Span> = HashMap::new();
-    for block in &document.blocks {
-        if let Block::Statement(s) = block
-            && let Some(title) = &s.title
-            && !s.is_reference
-        {
-            canonical_spans.entry(title.clone()).or_insert(s.span);
-        }
-    }
-
-    // Phase 2: walk blocks — PCS resolution + dialectical edge resolution.
-    let mut pcs: Vec<ResolvedPcs> = Vec::new();
-    let mut block_pcs: Vec<Option<PcsId>> = Vec::with_capacity(document.blocks.len());
-    let mut issues: Vec<PcsIssue> = Vec::new();
-    let mut edges: Vec<Edge> = Vec::new();
-    let mut relation_issues: Vec<RelationIssue> = Vec::new();
-    // Indent stack of the current node at each open level. A relation attaches
-    // to the nearest strictly-less-indented frame. Content anchors (statements,
-    // arguments, PCS statements — none of which carry an indent in the AST) sit
-    // at `ANCHOR_INDENT` (below any relation indent), so even an unindented
-    // relation (`indent 0`, which our parser accepts though the reference does
-    // not) still attaches to the statement above it.
-    let mut stack: Vec<Frame> = Vec::new();
-
-    for (i, block) in document.blocks.iter().enumerate() {
-        match block {
-            Block::Heading(_) => {
-                // A heading starts a new structural context for relations.
-                stack.clear();
-                block_pcs.push(None);
-            }
-            Block::Statement(s) => {
-                let node = top_level_statement_node(
-                    s,
-                    &mut model_statements,
-                    &mut by_title_stmt,
-                    &mut statement_conflicts,
-                    &mut conflict_idx,
-                    &mut canonical_spans,
-                );
-                enter(&mut stack, ANCHOR_INDENT, node);
-                block_pcs.push(None);
-            }
-            Block::Argument(a) => {
-                if let Some(&id) = by_title_arg.get(&a.title) {
-                    enter(&mut stack, ANCHOR_INDENT, Node::Argument(id));
-                }
-                block_pcs.push(None);
-            }
-            Block::Relation(r) => {
-                resolve_relation(
-                    r,
-                    &mut stack,
-                    &mut model_statements,
-                    &mut by_title_stmt,
-                    &mut model_arguments,
-                    &mut by_title_arg,
-                    &mut statement_conflicts,
-                    &mut conflict_idx,
-                    &mut canonical_spans,
-                    &mut edges,
-                    &mut relation_issues,
-                );
-                block_pcs.push(None);
-            }
-            Block::Pcs(p) => {
-                let pcs_id = PcsId(pcs.len());
-
-                // Linkage: strict adjacency. A PCS attaches to a named argument
-                // only when that argument block is the immediately-preceding
-                // block; otherwise it is its own anonymous argument.
-                let owner = match i.checked_sub(1).map(|prev| &document.blocks[prev]) {
-                    Some(Block::Argument(a)) => match by_title_arg.get(&a.title) {
-                        Some(&id) => {
-                            if model_arguments[id.0].pcs.is_none() {
-                                model_arguments[id.0].pcs = Some(pcs_id);
-                            }
-                            id
-                        }
-                        None => mint_anonymous_argument(&mut model_arguments, pcs_id),
-                    },
-                    _ => mint_anonymous_argument(&mut model_arguments, pcs_id),
-                };
-
-                let items = resolve_pcs_items(
-                    p,
-                    &mut model_statements,
-                    &mut by_title_stmt,
-                    &mut statement_conflicts,
-                    &mut conflict_idx,
-                    &mut canonical_spans,
-                    &mut issues,
-                );
-
-                // Interspersed PCS relations resolve in a PCS-local scope (their
-                // sources are the PCS's own statements, not the top-level stack).
-                resolve_pcs_relations(
-                    &items,
-                    &mut model_statements,
-                    &mut by_title_stmt,
-                    &mut model_arguments,
-                    &mut by_title_arg,
-                    &mut statement_conflicts,
-                    &mut conflict_idx,
-                    &mut canonical_spans,
-                    &mut edges,
-                    &mut relation_issues,
-                );
-
-                pcs.push(ResolvedPcs {
-                    id: pcs_id,
-                    argument: owner,
-                    items,
-                    span: p.span,
-                });
-                block_pcs.push(Some(pcs_id));
-            }
-        }
-    }
-
-    Model {
-        statements: model_statements,
-        arguments: model_arguments,
-        pcs,
-        block_pcs,
-        statement_conflicts,
-        argument_conflicts,
-        issues,
-        edges,
-        relation_issues,
-    }
+    let mut builder = Builder::seed(document);
+    builder.walk(document);
+    builder.into_model()
 }
 
 /// The stack indent of a content anchor (statement / argument / PCS statement).
@@ -384,6 +213,477 @@ struct Frame {
     node: Node,
 }
 
+/// The model under construction: the registries, their by-title lookup maps and
+/// conflict bookkeeping (build-time scaffolding), and the resolved outputs.
+/// Methods perform the resolution; [`Builder::into_model`] drops the scaffolding
+/// and hands back the [`Model`]. Bundling this shared state into one value keeps
+/// the resolver methods to a couple of parameters each.
+struct Builder {
+    statements: Vec<ModelStatement>,
+    by_title_stmt: HashMap<String, StatementId>,
+    arguments: Vec<ModelArgument>,
+    by_title_arg: HashMap<String, ArgumentId>,
+    statement_conflicts: Vec<StatementConflict>,
+    argument_conflicts: Vec<ArgumentConflict>,
+    /// `title → index in statement_conflicts`, to append later conflicting spans.
+    conflict_idx: HashMap<String, usize>,
+    /// `title → first-definition span`, the canonical span for conflicts.
+    canonical_spans: HashMap<String, Span>,
+    pcs: Vec<ResolvedPcs>,
+    block_pcs: Vec<Option<PcsId>>,
+    issues: Vec<PcsIssue>,
+    edges: Vec<Edge>,
+    relation_issues: Vec<RelationIssue>,
+}
+
+impl Builder {
+    /// Phase 1: seed the registries by reusing B3/B4a (prefix-correspondence).
+    fn seed(document: &Document) -> Self {
+        let statements = crate::build_statements(document);
+        let arguments = crate::build_arguments(document);
+
+        let model_statements: Vec<ModelStatement> = statements
+            .statements
+            .iter()
+            .map(|s| ModelStatement {
+                id: s.id,
+                title: Some(s.title.clone()),
+                canonical_text: s.canonical_text.clone(),
+                canonical_metadata: s.canonical_metadata.clone(),
+            })
+            .collect();
+        let by_title_stmt = model_statements
+            .iter()
+            .filter_map(|s| s.title.clone().map(|t| (t, s.id)))
+            .collect();
+
+        let model_arguments: Vec<ModelArgument> = arguments
+            .arguments
+            .iter()
+            .map(|a| ModelArgument {
+                id: a.id,
+                title: Some(a.title.clone()),
+                canonical_description: a.canonical_description.clone(),
+                canonical_metadata: a.canonical_metadata.clone(),
+                pcs: None,
+            })
+            .collect();
+        let by_title_arg = model_arguments
+            .iter()
+            .filter_map(|a| a.title.clone().map(|t| (t, a.id)))
+            .collect();
+
+        let statement_conflicts = statements.conflicts.clone();
+        let conflict_idx = statement_conflicts
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.title.clone(), i))
+            .collect();
+        let mut canonical_spans: HashMap<String, Span> = HashMap::new();
+        for block in &document.blocks {
+            if let Block::Statement(s) = block
+                && let Some(title) = &s.title
+                && !s.is_reference
+            {
+                canonical_spans.entry(title.clone()).or_insert(s.span);
+            }
+        }
+
+        Builder {
+            statements: model_statements,
+            by_title_stmt,
+            arguments: model_arguments,
+            by_title_arg,
+            statement_conflicts,
+            argument_conflicts: arguments.conflicts.clone(),
+            conflict_idx,
+            canonical_spans,
+            pcs: Vec::new(),
+            block_pcs: Vec::with_capacity(document.blocks.len()),
+            issues: Vec::new(),
+            edges: Vec::new(),
+            relation_issues: Vec::new(),
+        }
+    }
+
+    /// Phase 2: walk the blocks — PCS resolution + dialectical edge resolution.
+    ///
+    /// `stack` holds the current node at each open indent level. A relation
+    /// attaches to the nearest strictly-less-indented frame; content anchors
+    /// (statements, arguments, PCS statements — none carry an indent in the AST)
+    /// sit at [`ANCHOR_INDENT`] below any relation indent, so even an unindented
+    /// relation (`indent 0`, which our parser accepts though the reference does
+    /// not) still attaches to the statement above it.
+    fn walk(&mut self, document: &Document) {
+        let mut stack: Vec<Frame> = Vec::new();
+        for (i, block) in document.blocks.iter().enumerate() {
+            match block {
+                Block::Heading(_) => {
+                    // A heading starts a new structural context for relations.
+                    stack.clear();
+                    self.block_pcs.push(None);
+                }
+                Block::Statement(s) => {
+                    let node = self.top_level_statement_node(s);
+                    enter(&mut stack, ANCHOR_INDENT, node);
+                    self.block_pcs.push(None);
+                }
+                Block::Argument(a) => {
+                    if let Some(&id) = self.by_title_arg.get(&a.title) {
+                        enter(&mut stack, ANCHOR_INDENT, Node::Argument(id));
+                    }
+                    self.block_pcs.push(None);
+                }
+                Block::Relation(r) => {
+                    self.resolve_relation(r, &mut stack);
+                    self.block_pcs.push(None);
+                }
+                Block::Pcs(p) => {
+                    let prev = i.checked_sub(1).map(|j| &document.blocks[j]);
+                    self.resolve_pcs_block(p, prev);
+                }
+            }
+        }
+    }
+
+    /// Resolve a `Block::Pcs`: link it to its owning argument (strict adjacency:
+    /// a named argument only when it is the immediately-preceding block, else a
+    /// minted anonymous argument), then resolve its items and interspersed
+    /// relations.
+    fn resolve_pcs_block(&mut self, p: &argdown_core::Pcs, prev: Option<&Block>) {
+        let pcs_id = PcsId(self.pcs.len());
+
+        let owner = match prev {
+            Some(Block::Argument(a)) => match self.by_title_arg.get(&a.title).copied() {
+                Some(id) => {
+                    if self.arguments[id.0].pcs.is_none() {
+                        self.arguments[id.0].pcs = Some(pcs_id);
+                    }
+                    id
+                }
+                None => self.mint_anonymous_argument(pcs_id),
+            },
+            _ => self.mint_anonymous_argument(pcs_id),
+        };
+
+        let items = self.resolve_pcs_items(p);
+        // Interspersed PCS relations resolve in a PCS-local scope (their sources
+        // are the PCS's own statements, not the top-level stack).
+        self.resolve_pcs_relations(&items);
+
+        self.pcs.push(ResolvedPcs {
+            id: pcs_id,
+            argument: owner,
+            items,
+            span: p.span,
+        });
+        self.block_pcs.push(Some(pcs_id));
+    }
+
+    /// Drop the build-time scaffolding and hand back the finished model.
+    fn into_model(self) -> Model {
+        Model {
+            statements: self.statements,
+            arguments: self.arguments,
+            pcs: self.pcs,
+            block_pcs: self.block_pcs,
+            statement_conflicts: self.statement_conflicts,
+            argument_conflicts: self.argument_conflicts,
+            issues: self.issues,
+            edges: self.edges,
+            relation_issues: self.relation_issues,
+        }
+    }
+
+    /// The node for a top-level statement: a titled one is already in the
+    /// registry (from B3); a plain one is minted as a singleton so it can anchor
+    /// relations.
+    fn top_level_statement_node(&mut self, s: &Statement) -> Node {
+        if let Some(t) = &s.title
+            && let Some(&id) = self.by_title_stmt.get(t)
+        {
+            return Node::Statement(id);
+        }
+        Node::Statement(self.resolve_statement(s))
+    }
+
+    /// Resolve a top-level relation against the indent stack: peek the parent
+    /// (nearest strictly-less-indented frame), resolve the target to a node,
+    /// emit the directed edge, then push the target so deeper relations nest
+    /// under it.
+    fn resolve_relation(&mut self, r: &Relation, stack: &mut Vec<Frame>) {
+        let indent = r.indent as isize;
+        let Some(parent) = stack
+            .iter()
+            .rev()
+            .find(|f| f.indent < indent)
+            .map(|f| f.node)
+        else {
+            self.relation_issues
+                .push(RelationIssue::RelationWithoutParent { span: r.span });
+            return;
+        };
+        let target = self.resolve_relation_target(&r.target);
+        let (from, to) = orient(parent, target, &r.direction);
+        self.push_edge_if_new(from, to, relation_kind(&r.operator), r.span);
+        enter(stack, indent, target);
+    }
+
+    /// Resolve the interspersed relations of one PCS in a local scope: each PCS
+    /// statement is the base node for the relations that follow it; nested
+    /// relations attach to the enclosing relation's target.
+    fn resolve_pcs_relations(&mut self, items: &[ResolvedPcsItem]) {
+        let mut stack: Vec<Frame> = Vec::new();
+        for item in items {
+            match item {
+                ResolvedPcsItem::Statement { statement, .. } => {
+                    enter(&mut stack, ANCHOR_INDENT, Node::Statement(*statement));
+                }
+                ResolvedPcsItem::Relation(r) => {
+                    let indent = r.indent as isize;
+                    let Some(parent) = stack
+                        .iter()
+                        .rev()
+                        .find(|f| f.indent < indent)
+                        .map(|f| f.node)
+                    else {
+                        self.relation_issues
+                            .push(RelationIssue::RelationWithoutParent { span: r.span });
+                        continue;
+                    };
+                    let target = self.resolve_relation_target(&r.target);
+                    let (from, to) = orient(parent, target, &r.direction);
+                    self.push_edge_if_new(from, to, relation_kind(&r.operator), r.span);
+                    enter(&mut stack, indent, target);
+                }
+                ResolvedPcsItem::Inference { .. } => {}
+            }
+        }
+    }
+
+    /// Resolve a relation target to a node, minting/merging into the registry.
+    fn resolve_relation_target(&mut self, target: &RelationTarget) -> Node {
+        match target {
+            RelationTarget::Statement(s) => Node::Statement(self.resolve_statement(s)),
+            RelationTarget::Argument(a) => Node::Argument(self.resolve_argument(a)),
+        }
+    }
+
+    /// Resolve an argument by title: merge with an existing argument (filling its
+    /// canonical description on first definition) or mint a new one.
+    ///
+    /// Asymmetry with statements (deferred): a relation-target argument
+    /// *re*definition (`<A>: d1` then `- <A>: d2`) keeps the first description but
+    /// does not record an `ArgumentConflict` — arguments carry no canonical-span
+    /// bookkeeping here, and argument redefinition is far rarer than statement
+    /// redefinition. Top-level argument conflicts are still captured by B4a.
+    fn resolve_argument(&mut self, a: &Argument) -> ArgumentId {
+        if let Some(&id) = self.by_title_arg.get(&a.title) {
+            if !a.is_reference && self.arguments[id.0].canonical_description.is_none() {
+                self.arguments[id.0].canonical_description = Some(a.description.clone());
+                self.arguments[id.0].canonical_metadata = parse_meta(a.metadata.as_ref());
+            }
+            return id;
+        }
+        let id = ArgumentId(self.arguments.len());
+        let defined = !a.is_reference;
+        self.arguments.push(ModelArgument {
+            id,
+            title: Some(a.title.clone()),
+            canonical_description: defined.then(|| a.description.clone()),
+            canonical_metadata: if defined {
+                parse_meta(a.metadata.as_ref())
+            } else {
+                None
+            },
+            pcs: None,
+        });
+        self.by_title_arg.insert(a.title.clone(), id);
+        id
+    }
+
+    /// Append a fresh anonymous argument (a standalone PCS) and return its id.
+    fn mint_anonymous_argument(&mut self, pcs: PcsId) -> ArgumentId {
+        let id = ArgumentId(self.arguments.len());
+        self.arguments.push(ModelArgument {
+            id,
+            title: None,
+            canonical_description: None,
+            canonical_metadata: None,
+            pcs: Some(pcs),
+        });
+        id
+    }
+
+    /// Append an edge unless one with the same `(from, to, kind)` already exists
+    /// (the first occurrence's span is kept). Linear scan — O(n) per insert,
+    /// O(n²) over a document; fine at expected document sizes. If large
+    /// dialectical maps ever matter, pair `edges` with a
+    /// `HashSet<(Node, Node, RelationKind)>`.
+    fn push_edge_if_new(&mut self, from: Node, to: Node, kind: RelationKind, span: Span) {
+        if !self
+            .edges
+            .iter()
+            .any(|e| e.from == from && e.to == to && e.kind == kind)
+        {
+            self.edges.push(Edge {
+                from,
+                to,
+                kind,
+                span,
+            });
+        }
+    }
+
+    /// Resolve one PCS into roled items: bind inferences to the conclusion that
+    /// follows them (relations transparent), resolve every statement to the
+    /// unified registry, finalize positional roles, and emit issues for
+    /// degenerate cases.
+    fn resolve_pcs_items(&mut self, p: &argdown_core::Pcs) -> Vec<ResolvedPcsItem> {
+        if p.items.is_empty() {
+            self.issues.push(PcsIssue::EmptyPcs { pcs_span: p.span });
+        }
+
+        let mut items: Vec<ResolvedPcsItem> = Vec::with_capacity(p.items.len());
+        // The `items` index of an inference still awaiting its conclusion.
+        let mut pending_inference: Option<usize> = None;
+
+        for item in &p.items {
+            match item {
+                PcsItem::Statement {
+                    number,
+                    statement,
+                    span,
+                } => {
+                    let id = self.resolve_statement(statement);
+                    // Bind a pending inference to this statement (its conclusion).
+                    let role = if let Some(inf_idx) = pending_inference.take() {
+                        let conclusion_idx = items.len();
+                        if let ResolvedPcsItem::Inference {
+                            concludes_item_idx, ..
+                        } = &mut items[inf_idx]
+                        {
+                            *concludes_item_idx = Some(conclusion_idx);
+                        }
+                        // Provisional; finalized after the loop.
+                        Role::IntermediaryConclusion
+                    } else {
+                        Role::Premise
+                    };
+                    items.push(ResolvedPcsItem::Statement {
+                        role,
+                        number: *number,
+                        statement: id,
+                        span: *span,
+                    });
+                }
+                PcsItem::Inference { rules, span, .. } => {
+                    // `pending_inference` only ever holds the index of an
+                    // `Inference` item, so the let-chain always matches.
+                    if let Some(prev) = pending_inference.take()
+                        && let ResolvedPcsItem::Inference {
+                            span: first_span, ..
+                        } = &items[prev]
+                    {
+                        self.issues.push(PcsIssue::ConsecutiveInferences {
+                            first_span: *first_span,
+                            second_span: *span,
+                        });
+                    }
+                    items.push(ResolvedPcsItem::Inference {
+                        rules: rules.clone(),
+                        concludes_item_idx: None,
+                        span: *span,
+                    });
+                    pending_inference = Some(items.len() - 1);
+                }
+                PcsItem::Relation(r) => {
+                    // Transparent: a relation does not break inference binding.
+                    items.push(ResolvedPcsItem::Relation(r.clone()));
+                }
+            }
+        }
+
+        // A still-pending inference at the end has no conclusion.
+        if let Some(inf_idx) = pending_inference.take()
+            && let ResolvedPcsItem::Inference { span, .. } = &items[inf_idx]
+        {
+            self.issues.push(PcsIssue::InferenceWithNoConclusion {
+                inference_span: *span,
+            });
+        }
+
+        finalize_roles(&mut items);
+        items
+    }
+
+    /// Resolve a statement to the unified registry: titled statements merge by
+    /// title (filling the canonical on first definition, recording a conflict on
+    /// a later one); untitled statements are minted as singletons.
+    fn resolve_statement(&mut self, statement: &Statement) -> StatementId {
+        let Some(title) = &statement.title else {
+            // Untitled: a singleton equivalence class (always a definition).
+            let id = StatementId(self.statements.len());
+            self.statements.push(ModelStatement {
+                id,
+                title: None,
+                canonical_text: Some(statement.text.clone()),
+                canonical_metadata: parse_meta(statement.metadata.as_ref()),
+            });
+            return id;
+        };
+
+        // get-then-insert (not `entry`'s closure) so the two registry fields are
+        // never borrowed simultaneously.
+        let id = match self.by_title_stmt.get(title) {
+            Some(&id) => id,
+            None => {
+                let id = StatementId(self.statements.len());
+                self.statements.push(ModelStatement {
+                    id,
+                    title: Some(title.clone()),
+                    canonical_text: None,
+                    canonical_metadata: None,
+                });
+                self.by_title_stmt.insert(title.clone(), id);
+                id
+            }
+        };
+
+        if !statement.is_reference {
+            if self.statements[id.0].canonical_text.is_none() {
+                self.statements[id.0].canonical_text = Some(statement.text.clone());
+                self.statements[id.0].canonical_metadata = parse_meta(statement.metadata.as_ref());
+                self.canonical_spans
+                    .entry(title.clone())
+                    .or_insert(statement.span);
+            } else {
+                // Redefinition over the unified (top-level + PCS) definition set.
+                let canonical_span = self
+                    .canonical_spans
+                    .get(title)
+                    .copied()
+                    .unwrap_or(statement.span);
+                match self.conflict_idx.get(title).copied() {
+                    Some(ci) => self.statement_conflicts[ci]
+                        .conflicting_spans
+                        .push(statement.span),
+                    None => {
+                        let ci = self.statement_conflicts.len();
+                        self.statement_conflicts.push(StatementConflict {
+                            title: title.clone(),
+                            canonical_span,
+                            conflicting_spans: vec![statement.span],
+                        });
+                        self.conflict_idx.insert(title.clone(), ci);
+                    }
+                }
+            }
+        }
+        id
+    }
+}
+
 /// Push `node` at `indent`, first popping any frames at the same or deeper
 /// indentation (monotonic discipline).
 fn enter(stack: &mut Vec<Frame>, indent: isize, node: Node) {
@@ -391,346 +691,6 @@ fn enter(stack: &mut Vec<Frame>, indent: isize, node: Node) {
         stack.pop();
     }
     stack.push(Frame { indent, node });
-}
-
-/// The node for a top-level statement: a titled one is already in the registry
-/// (from B3); a plain one is minted as a singleton so it can anchor relations.
-fn top_level_statement_node(
-    s: &Statement,
-    model_statements: &mut Vec<ModelStatement>,
-    by_title: &mut HashMap<String, StatementId>,
-    conflicts: &mut Vec<StatementConflict>,
-    conflict_idx: &mut HashMap<String, usize>,
-    canonical_spans: &mut HashMap<String, Span>,
-) -> Node {
-    if let Some(t) = &s.title
-        && let Some(&id) = by_title.get(t)
-    {
-        return Node::Statement(id);
-    }
-    Node::Statement(resolve_pcs_statement(
-        s,
-        model_statements,
-        by_title,
-        conflicts,
-        conflict_idx,
-        canonical_spans,
-    ))
-}
-
-/// Resolve a top-level relation against the indent stack: peek the parent
-/// (nearest strictly-less-indented frame), resolve the target to a node, emit
-/// the directed edge, then push the target so deeper relations nest under it.
-#[allow(clippy::too_many_arguments)]
-fn resolve_relation(
-    r: &Relation,
-    stack: &mut Vec<Frame>,
-    model_statements: &mut Vec<ModelStatement>,
-    by_title_stmt: &mut HashMap<String, StatementId>,
-    model_arguments: &mut Vec<ModelArgument>,
-    by_title_arg: &mut HashMap<String, ArgumentId>,
-    conflicts: &mut Vec<StatementConflict>,
-    conflict_idx: &mut HashMap<String, usize>,
-    canonical_spans: &mut HashMap<String, Span>,
-    edges: &mut Vec<Edge>,
-    relation_issues: &mut Vec<RelationIssue>,
-) {
-    let indent = r.indent as isize;
-    let Some(parent) = stack
-        .iter()
-        .rev()
-        .find(|f| f.indent < indent)
-        .map(|f| f.node)
-    else {
-        relation_issues.push(RelationIssue::RelationWithoutParent { span: r.span });
-        return;
-    };
-    let target = resolve_relation_target(
-        &r.target,
-        model_statements,
-        by_title_stmt,
-        model_arguments,
-        by_title_arg,
-        conflicts,
-        conflict_idx,
-        canonical_spans,
-    );
-    let (from, to) = orient(parent, target, &r.direction);
-    push_edge_if_new(edges, from, to, relation_kind(&r.operator), r.span);
-    enter(stack, indent, target);
-}
-
-/// Resolve the interspersed relations of one PCS in a local scope: each PCS
-/// statement is the base node for the relations that follow it; nested relations
-/// attach to the enclosing relation's target.
-#[allow(clippy::too_many_arguments)]
-fn resolve_pcs_relations(
-    items: &[ResolvedPcsItem],
-    model_statements: &mut Vec<ModelStatement>,
-    by_title_stmt: &mut HashMap<String, StatementId>,
-    model_arguments: &mut Vec<ModelArgument>,
-    by_title_arg: &mut HashMap<String, ArgumentId>,
-    conflicts: &mut Vec<StatementConflict>,
-    conflict_idx: &mut HashMap<String, usize>,
-    canonical_spans: &mut HashMap<String, Span>,
-    edges: &mut Vec<Edge>,
-    relation_issues: &mut Vec<RelationIssue>,
-) {
-    let mut stack: Vec<Frame> = Vec::new();
-    for item in items {
-        match item {
-            ResolvedPcsItem::Statement { statement, .. } => {
-                enter(&mut stack, ANCHOR_INDENT, Node::Statement(*statement));
-            }
-            ResolvedPcsItem::Relation(r) => {
-                let indent = r.indent as isize;
-                let Some(parent) = stack
-                    .iter()
-                    .rev()
-                    .find(|f| f.indent < indent)
-                    .map(|f| f.node)
-                else {
-                    relation_issues.push(RelationIssue::RelationWithoutParent { span: r.span });
-                    continue;
-                };
-                let target = resolve_relation_target(
-                    &r.target,
-                    model_statements,
-                    by_title_stmt,
-                    model_arguments,
-                    by_title_arg,
-                    conflicts,
-                    conflict_idx,
-                    canonical_spans,
-                );
-                let (from, to) = orient(parent, target, &r.direction);
-                push_edge_if_new(edges, from, to, relation_kind(&r.operator), r.span);
-                enter(&mut stack, indent, target);
-            }
-            ResolvedPcsItem::Inference { .. } => {}
-        }
-    }
-}
-
-/// Resolve a relation target to a node, minting/merging into the registry.
-#[allow(clippy::too_many_arguments)]
-fn resolve_relation_target(
-    target: &RelationTarget,
-    model_statements: &mut Vec<ModelStatement>,
-    by_title_stmt: &mut HashMap<String, StatementId>,
-    model_arguments: &mut Vec<ModelArgument>,
-    by_title_arg: &mut HashMap<String, ArgumentId>,
-    conflicts: &mut Vec<StatementConflict>,
-    conflict_idx: &mut HashMap<String, usize>,
-    canonical_spans: &mut HashMap<String, Span>,
-) -> Node {
-    match target {
-        RelationTarget::Statement(s) => Node::Statement(resolve_pcs_statement(
-            s,
-            model_statements,
-            by_title_stmt,
-            conflicts,
-            conflict_idx,
-            canonical_spans,
-        )),
-        RelationTarget::Argument(a) => {
-            Node::Argument(resolve_argument_node(a, model_arguments, by_title_arg))
-        }
-    }
-}
-
-/// Resolve a relation-target argument by title: merge with an existing argument
-/// (filling its canonical description on first definition) or mint a new one.
-///
-/// Asymmetry with statements (deferred): a relation-target argument *re*definition
-/// (`<A>: d1` then `- <A>: d2`) keeps the first description but does not record an
-/// `ArgumentConflict` — arguments carry no canonical-span bookkeeping here, and
-/// argument redefinition is far rarer than statement redefinition. Top-level
-/// argument conflicts are still captured by B4a.
-fn resolve_argument_node(
-    a: &argdown_core::Argument,
-    model_arguments: &mut Vec<ModelArgument>,
-    by_title_arg: &mut HashMap<String, ArgumentId>,
-) -> ArgumentId {
-    if let Some(&id) = by_title_arg.get(&a.title) {
-        if !a.is_reference && model_arguments[id.0].canonical_description.is_none() {
-            model_arguments[id.0].canonical_description = Some(a.description.clone());
-            model_arguments[id.0].canonical_metadata = a
-                .metadata
-                .as_ref()
-                .map(crate::metadata::parse_metadata)
-                .transpose()
-                .ok()
-                .flatten();
-        }
-        return id;
-    }
-    let id = ArgumentId(model_arguments.len());
-    let defined = !a.is_reference;
-    model_arguments.push(ModelArgument {
-        id,
-        title: Some(a.title.clone()),
-        canonical_description: defined.then(|| a.description.clone()),
-        canonical_metadata: defined
-            .then(|| {
-                a.metadata
-                    .as_ref()
-                    .map(crate::metadata::parse_metadata)
-                    .transpose()
-                    .ok()
-                    .flatten()
-            })
-            .flatten(),
-        pcs: None,
-    });
-    by_title_arg.insert(a.title.clone(), id);
-    id
-}
-
-/// Orient a relation into a directed `(from, to)` edge per its direction.
-fn orient(parent: Node, target: Node, direction: &RelationDirection) -> (Node, Node) {
-    match direction {
-        RelationDirection::Inbound => (target, parent),
-        RelationDirection::Outbound | RelationDirection::Bidirectional => (parent, target),
-    }
-}
-
-/// Map the parser's `RelationOperator` to a `RelationKind`.
-fn relation_kind(operator: &RelationOperator) -> RelationKind {
-    match operator {
-        RelationOperator::Support => RelationKind::Support,
-        RelationOperator::Attack => RelationKind::Attack,
-        RelationOperator::Undercut => RelationKind::Undercut,
-        RelationOperator::Contradictory => RelationKind::Contradictory,
-    }
-}
-
-/// Append an edge unless one with the same `(from, to, kind)` already exists
-/// (the first occurrence's span is kept). Linear scan — O(n) per insert, O(n²)
-/// over a document; fine at expected document sizes. If large dialectical maps
-/// ever matter, pair `edges` with a `HashSet<(Node, Node, RelationKind)>`.
-fn push_edge_if_new(edges: &mut Vec<Edge>, from: Node, to: Node, kind: RelationKind, span: Span) {
-    if !edges
-        .iter()
-        .any(|e| e.from == from && e.to == to && e.kind == kind)
-    {
-        edges.push(Edge {
-            from,
-            to,
-            kind,
-            span,
-        });
-    }
-}
-
-/// Append a fresh anonymous argument (a standalone PCS) and return its id.
-fn mint_anonymous_argument(arguments: &mut Vec<ModelArgument>, pcs: PcsId) -> ArgumentId {
-    let id = ArgumentId(arguments.len());
-    arguments.push(ModelArgument {
-        id,
-        title: None,
-        canonical_description: None,
-        canonical_metadata: None,
-        pcs: Some(pcs),
-    });
-    id
-}
-
-/// Resolve one PCS into roled items: bind inferences to the conclusion that
-/// follows them (relations transparent), resolve every statement to the unified
-/// registry, finalize positional roles, and emit issues for degenerate cases.
-#[allow(clippy::too_many_arguments)]
-fn resolve_pcs_items(
-    p: &argdown_core::Pcs,
-    model_statements: &mut Vec<ModelStatement>,
-    by_title: &mut HashMap<String, StatementId>,
-    conflicts: &mut Vec<StatementConflict>,
-    conflict_idx: &mut HashMap<String, usize>,
-    canonical_spans: &mut HashMap<String, Span>,
-    issues: &mut Vec<PcsIssue>,
-) -> Vec<ResolvedPcsItem> {
-    if p.items.is_empty() {
-        issues.push(PcsIssue::EmptyPcs { pcs_span: p.span });
-    }
-
-    let mut items: Vec<ResolvedPcsItem> = Vec::with_capacity(p.items.len());
-    // The `items` index of an inference still awaiting its conclusion.
-    let mut pending_inference: Option<usize> = None;
-
-    for item in &p.items {
-        match item {
-            PcsItem::Statement {
-                number,
-                statement,
-                span,
-            } => {
-                let id = resolve_pcs_statement(
-                    statement,
-                    model_statements,
-                    by_title,
-                    conflicts,
-                    conflict_idx,
-                    canonical_spans,
-                );
-                // Bind a pending inference to this statement (its conclusion).
-                let role = if let Some(inf_idx) = pending_inference.take() {
-                    let conclusion_idx = items.len();
-                    if let ResolvedPcsItem::Inference {
-                        concludes_item_idx, ..
-                    } = &mut items[inf_idx]
-                    {
-                        *concludes_item_idx = Some(conclusion_idx);
-                    }
-                    // Provisional; finalized after the loop.
-                    Role::IntermediaryConclusion
-                } else {
-                    Role::Premise
-                };
-                items.push(ResolvedPcsItem::Statement {
-                    role,
-                    number: *number,
-                    statement: id,
-                    span: *span,
-                });
-            }
-            PcsItem::Inference { rules, span, .. } => {
-                // `pending_inference` only ever holds the index of an
-                // `Inference` item, so the let-chain always matches.
-                if let Some(prev) = pending_inference.take()
-                    && let ResolvedPcsItem::Inference {
-                        span: first_span, ..
-                    } = &items[prev]
-                {
-                    issues.push(PcsIssue::ConsecutiveInferences {
-                        first_span: *first_span,
-                        second_span: *span,
-                    });
-                }
-                items.push(ResolvedPcsItem::Inference {
-                    rules: rules.clone(),
-                    concludes_item_idx: None,
-                    span: *span,
-                });
-                pending_inference = Some(items.len() - 1);
-            }
-            PcsItem::Relation(r) => {
-                // Transparent: a relation does not break inference binding.
-                items.push(ResolvedPcsItem::Relation(r.clone()));
-            }
-        }
-    }
-
-    // A still-pending inference at the end has no conclusion.
-    if let Some(inf_idx) = pending_inference.take()
-        && let ResolvedPcsItem::Inference { span, .. } = &items[inf_idx]
-    {
-        issues.push(PcsIssue::InferenceWithNoConclusion {
-            inference_span: *span,
-        });
-    }
-
-    finalize_roles(&mut items);
-    items
 }
 
 /// Among the bound conclusions, the last in item order is the main conclusion;
@@ -760,77 +720,27 @@ fn finalize_roles(items: &mut [ResolvedPcsItem]) {
     }
 }
 
-/// Resolve a PCS statement to the unified registry: titled statements merge by
-/// title (filling the canonical on first definition, recording a conflict on a
-/// later one); untitled statements are minted as singletons.
-fn resolve_pcs_statement(
-    statement: &Statement,
-    model_statements: &mut Vec<ModelStatement>,
-    by_title: &mut HashMap<String, StatementId>,
-    conflicts: &mut Vec<StatementConflict>,
-    conflict_idx: &mut HashMap<String, usize>,
-    canonical_spans: &mut HashMap<String, Span>,
-) -> StatementId {
-    let Some(title) = &statement.title else {
-        // Untitled: a singleton equivalence class (always a definition).
-        let id = StatementId(model_statements.len());
-        model_statements.push(ModelStatement {
-            id,
-            title: None,
-            canonical_text: Some(statement.text.clone()),
-            canonical_metadata: parse_canonical_metadata(statement),
-        });
-        return id;
-    };
-
-    let id = *by_title.entry(title.clone()).or_insert_with(|| {
-        let id = StatementId(model_statements.len());
-        model_statements.push(ModelStatement {
-            id,
-            title: Some(title.clone()),
-            canonical_text: None,
-            canonical_metadata: None,
-        });
-        id
-    });
-
-    if !statement.is_reference {
-        if model_statements[id.0].canonical_text.is_none() {
-            model_statements[id.0].canonical_text = Some(statement.text.clone());
-            model_statements[id.0].canonical_metadata = parse_canonical_metadata(statement);
-            canonical_spans
-                .entry(title.clone())
-                .or_insert(statement.span);
-        } else {
-            // Redefinition over the unified (top-level + PCS) definition set.
-            let canonical_span = canonical_spans
-                .get(title)
-                .copied()
-                .unwrap_or(statement.span);
-            match conflict_idx.get(title) {
-                Some(&ci) => conflicts[ci].conflicting_spans.push(statement.span),
-                None => {
-                    let ci = conflicts.len();
-                    conflicts.push(StatementConflict {
-                        title: title.clone(),
-                        canonical_span,
-                        conflicting_spans: vec![statement.span],
-                    });
-                    conflict_idx.insert(title.clone(), ci);
-                }
-            }
-        }
+/// Orient a relation into a directed `(from, to)` edge per its direction.
+fn orient(parent: Node, target: Node, direction: &RelationDirection) -> (Node, Node) {
+    match direction {
+        RelationDirection::Inbound => (target, parent),
+        RelationDirection::Outbound | RelationDirection::Bidirectional => (parent, target),
     }
-    id
 }
 
-/// Parse a statement's metadata via B2, absorbing parse errors as `None`
-/// (the model is total).
-fn parse_canonical_metadata(statement: &Statement) -> Option<Value> {
-    statement
-        .metadata
-        .as_ref()
-        .map(crate::metadata::parse_metadata)
+/// Map the parser's `RelationOperator` to a `RelationKind`.
+fn relation_kind(operator: &RelationOperator) -> RelationKind {
+    match operator {
+        RelationOperator::Support => RelationKind::Support,
+        RelationOperator::Attack => RelationKind::Attack,
+        RelationOperator::Undercut => RelationKind::Undercut,
+        RelationOperator::Contradictory => RelationKind::Contradictory,
+    }
+}
+
+/// Parse metadata via B2, absorbing parse errors as `None` (the model is total).
+fn parse_meta(meta: Option<&Metadata>) -> Option<Value> {
+    meta.map(crate::metadata::parse_metadata)
         .transpose()
         .ok()
         .flatten()
