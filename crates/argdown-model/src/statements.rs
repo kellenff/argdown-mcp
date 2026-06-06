@@ -187,4 +187,155 @@ mod tests {
         assert!(s.conflicts.is_empty());
         assert_eq!(s.block_statements, vec![Some(StatementId(0))]);
     }
+
+    #[test]
+    fn empty_document_has_no_statements() {
+        let doc = parse("").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s, Statements::default());
+    }
+
+    #[test]
+    fn single_titled_reference_has_no_canonical() {
+        let doc = parse("[A]").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 1);
+        assert_eq!(s.statements[0].title, "A");
+        assert_eq!(s.statements[0].canonical_text, None);
+        assert!(s.conflicts.is_empty());
+        assert_eq!(s.block_statements, vec![Some(StatementId(0))]);
+    }
+
+    #[test]
+    fn definition_then_reference_share_one_entity() {
+        let doc = parse("[A]: claim\n\n[A]").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 1);
+        assert_eq!(s.statements[0].canonical_text.as_deref(), Some("claim"));
+        assert_eq!(
+            s.block_statements,
+            vec![Some(StatementId(0)), Some(StatementId(0))]
+        );
+        assert!(s.conflicts.is_empty());
+    }
+
+    #[test]
+    fn reference_then_definition_fills_canonical_later() {
+        let doc = parse("[A]\n\n[A]: claim").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 1);
+        // The reference created the entity; the later definition filled canonical.
+        assert_eq!(s.statements[0].canonical_text.as_deref(), Some("claim"));
+        assert_eq!(
+            s.block_statements,
+            vec![Some(StatementId(0)), Some(StatementId(0))]
+        );
+        assert!(s.conflicts.is_empty());
+    }
+
+    #[test]
+    fn redefinition_records_a_conflict() {
+        let doc = parse("[A]: claim1\n\n[A]: claim2").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 1);
+        // First definition wins.
+        assert_eq!(s.statements[0].canonical_text.as_deref(), Some("claim1"));
+        assert_eq!(s.conflicts.len(), 1);
+        assert_eq!(s.conflicts[0].title, "A");
+        assert_eq!(s.conflicts[0].conflicting_spans.len(), 1);
+    }
+
+    #[test]
+    fn three_distinct_titles_create_three_entities_in_source_order() {
+        let doc = parse("[A]: one\n\n[B]: two\n\n[C]: three").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 3);
+        assert_eq!(s.statements[0].title, "A");
+        assert_eq!(s.statements[1].title, "B");
+        assert_eq!(s.statements[2].title, "C");
+        assert_eq!(
+            s.block_statements,
+            vec![
+                Some(StatementId(0)),
+                Some(StatementId(1)),
+                Some(StatementId(2)),
+            ]
+        );
+        assert!(s.conflicts.is_empty());
+    }
+
+    #[test]
+    fn plain_text_statement_is_not_an_entity() {
+        let doc = parse("just some text").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 0);
+        assert_eq!(s.block_statements, vec![None]);
+        assert!(s.conflicts.is_empty());
+    }
+
+    #[test]
+    fn non_statement_blocks_have_no_statement_id() {
+        // A heading and an argument definition — neither is a statement.
+        let doc = parse("# heading\n\n<A>: desc\n\n> argument").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 0);
+        assert_eq!(s.block_statements, vec![None, None, None]);
+        assert!(s.conflicts.is_empty());
+    }
+
+    #[test]
+    fn three_redefinitions_record_two_conflicting_spans() {
+        let doc = parse("[A]: c1\n\n[A]: c2\n\n[A]: c3").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 1);
+        assert_eq!(s.statements[0].canonical_text.as_deref(), Some("c1"));
+        assert_eq!(s.conflicts.len(), 1);
+        assert_eq!(s.conflicts[0].conflicting_spans.len(), 2);
+    }
+
+    #[test]
+    fn canonical_metadata_is_parsed() {
+        // Inline metadata on the definition: the parser captures it as
+        // Statement.metadata; build_statements parses it via B2's
+        // parse_metadata and stores the result as canonical_metadata.
+        let doc = parse("[A]: claim { key: value }").unwrap();
+        let s = build_statements(&doc);
+        let meta = s.statements[0]
+            .canonical_metadata
+            .as_ref()
+            .expect("definition had metadata");
+        let Value::Mapping(map) = meta else {
+            panic!("expected Value::Mapping, got {meta:?}");
+        };
+        assert!(map.contains_key("key"));
+    }
+
+    #[test]
+    fn parser_normalizes_titles_by_trimming() {
+        // The parser's `statement_title` already trims whitespace; B3
+        // doesn't re-normalize, so the trim is inherited. This test
+        // documents that expectation.
+        let doc = parse("[ A ]: claim").unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 1);
+        assert_eq!(s.statements[0].title, "A");
+    }
+
+    #[test]
+    fn conflicts_are_sorted_in_source_order_of_title_first_appearance() {
+        // Titles X, Y, Z appear in order X, Y, Z. Each is redefined in the
+        // same order (X at block 3, Y at block 5, Z at block 7). Conflicts
+        // should come out in source order: X, Y, Z (the order the titles
+        // first appeared, not the order the redefinitions happened).
+        let doc = parse(
+            "[X]: x1\n\n[Y]: y1\n\n[Z]: z1\n\n[X]: x2\n\n[Y]: y2\n\n[Z]: z2",
+        )
+        .unwrap();
+        let s = build_statements(&doc);
+        assert_eq!(s.statements.len(), 3);
+        assert_eq!(s.conflicts.len(), 3);
+        assert_eq!(s.conflicts[0].title, "X");
+        assert_eq!(s.conflicts[1].title, "Y");
+        assert_eq!(s.conflicts[2].title, "Z");
+    }
 }
