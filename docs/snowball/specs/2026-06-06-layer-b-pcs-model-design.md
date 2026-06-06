@@ -94,9 +94,15 @@ once untitled statements are first-class).
    B3's / B4a's** (same id → same entity), with new ids appended for PCS-only
    titled statements, untitled singletons, and anonymous arguments. B3/B4a
    source is unchanged.
-6. **Signature** `build_model(&Document, &Arguments, &Statements) -> Model` —
-   reuses B3/B4a outputs as the seed (no re-derivation), resolves all
-   cross-links in one pass.
+6. **Signature** `build_model(&Document) -> Model` — template-consistent with
+   B1–B4a (all `build_X(&Document)`). It **reuses** `build_statements` and
+   `build_arguments` internally for the seed registries (no logic duplication),
+   then tracks first-definition spans itself so conflicts can be detected over
+   the **unified** (top-level + PCS) definition set — B3 does not expose the
+   canonical spans needed for cross-context conflicts, so the Model owns that
+   computation. (Refined from the brain-jam's 3-arg signature during
+   implementation: taking `&Statements`/`&Arguments` could not supply the
+   conflict spans, and a single `&Document` input matches the slice template.)
 
 ## Architecture
 
@@ -115,9 +121,9 @@ B3's always-titled `Statement` cannot express), but reuses the `StatementId` /
 ```rust
 use argdown_core::{Block, Document, Relation, Span};
 
-pub use crate::arguments::ArgumentId;
+pub use crate::arguments::{ArgumentConflict, ArgumentId};
 pub use crate::metadata::Value;
-pub use crate::statements::{ArgumentConflict, StatementConflict, StatementId};
+pub use crate::statements::{StatementConflict, StatementId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PcsId(pub usize);
@@ -219,21 +225,21 @@ pub struct Model {
     pub issues: Vec<PcsIssue>,
 }
 
-pub fn build_model(
-    document: &Document,
-    arguments: &Arguments,
-    statements: &Statements,
-) -> Model
+pub fn build_model(document: &Document) -> Model
 ```
 
 ## Algorithm
 
-A multi-pass walk over `document.blocks`, seeded from B3/B4a:
+A multi-pass walk over `document.blocks`, seeded by reusing B3/B4a:
 
-1. **Seed registries.** Copy B3's `statements` into `Model.statements`
-   (`title: Some`) and B4a's `arguments` into `Model.arguments`, preserving ids
-   (prefix-correspondence). Carry forward B3/B4a conflicts. Maintain
-   `title → StatementId` and `title → ArgumentId` maps from the seeds.
+1. **Seed registries.** Call `build_statements(document)` and
+   `build_arguments(document)` (reuse — no logic duplication). Copy their
+   entities into `Model.statements` (`title: Some`) and `Model.arguments`
+   (`title: Some`, `pcs: None`), preserving ids (prefix-correspondence). Carry
+   forward their conflicts. Build `title → StatementId` / `title → ArgumentId`
+   maps, and — by a light walk of top-level `Block::Statement` definitions —
+   a `title → first-definition Span` map so PCS redefinitions can be reported
+   as `StatementConflict`s over the unified definition set.
 
 2. **Linkage pass.** For each `Block::Pcs` at index `i`, inspect block `i-1`
    (the immediately-preceding block; blanks/comments are not blocks in our
