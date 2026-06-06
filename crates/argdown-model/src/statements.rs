@@ -8,7 +8,7 @@
 //! mentions (`StatementMention` in inlines) are not entities; B3 handles
 //! block-level statements only.
 
-use argdown_core::{Document, Span};
+use argdown_core::{Block, Document, Span};
 
 pub use crate::metadata::Value;
 
@@ -73,6 +73,118 @@ pub struct Statements {
 /// the first definition; later definitions append to a per-title
 /// `StatementConflict`. Plain-text statements and non-statement blocks
 /// push `None` to `block_statements`.
-pub fn build_statements(_document: &Document) -> Statements {
-    Statements::default()
+pub fn build_statements(document: &Document) -> Statements {
+    use std::collections::HashMap;
+
+    let mut statements: Vec<Statement> = Vec::new();
+    let mut by_title: HashMap<String, StatementId> = HashMap::new();
+    // Records the span of the first definition for each titled statement.
+    // Populated on the first definition; looked up when a redefinition
+    // creates a conflict entry.
+    let mut canonical_spans: HashMap<String, Span> = HashMap::new();
+    // Conflicts keyed by title; only populated when a redefinition is
+    // detected. Drained and sorted at the end so the output is in source
+    // order of the title's first appearance.
+    let mut conflict_map: HashMap<String, StatementConflict> = HashMap::new();
+    let mut block_statements: Vec<Option<StatementId>> = Vec::with_capacity(document.blocks.len());
+
+    for block in &document.blocks {
+        // 1. Resolve the block's id (if any).
+        let id = match block {
+            Block::Statement(s) => s.title.as_ref().map(|title| {
+                *by_title.entry(title.clone()).or_insert_with(|| {
+                    let id = StatementId(statements.len());
+                    statements.push(Statement {
+                        id,
+                        title: title.clone(),
+                        canonical_text: None,
+                        canonical_metadata: None,
+                    });
+                    id
+                })
+            }),
+            _ => None,
+        };
+
+        // 2. For a definition, fill in canonical on first occurrence and
+        //    record a conflict on a redefinition.
+        if let (Block::Statement(s), Some(id)) = (block, id)
+            && !s.is_reference
+        {
+            let title = s
+                .title
+                .as_ref()
+                .expect("a statement block with a resolved id has a title");
+            let entry = &mut statements[id.0];
+            if entry.canonical_text.is_none() {
+                // First definition: fill in canonical and record the
+                // span for any future redefinition conflict.
+                entry.canonical_text = Some(s.text.clone());
+                entry.canonical_metadata = s
+                    .metadata
+                    .as_ref()
+                    .map(crate::metadata::parse_metadata)
+                    .transpose()
+                    .ok()
+                    .flatten();
+                canonical_spans.insert(title.clone(), s.span);
+            } else {
+                // Already defined: this is a redefinition conflict.
+                // Look up the canonical span recorded on the first
+                // definition (it must exist — canonical_text was set
+                // then).
+                let canonical_span = canonical_spans
+                    .get(title)
+                    .copied()
+                    .expect("a redefined title has a recorded canonical span");
+                let entry =
+                    conflict_map
+                        .entry(title.clone())
+                        .or_insert_with(|| StatementConflict {
+                            title: title.clone(),
+                            canonical_span,
+                            conflicting_spans: Vec::new(),
+                        });
+                entry.conflicting_spans.push(s.span);
+            }
+        }
+
+        // 3. Record the block→entity mapping.
+        block_statements.push(id);
+    }
+
+    // Drain conflicts in source order (by first appearance of the title).
+    let mut conflicts: Vec<StatementConflict> = conflict_map.into_values().collect();
+    conflicts.sort_by_key(|c| {
+        statements
+            .iter()
+            .position(|s| s.title == c.title)
+            .unwrap_or(0)
+    });
+
+    Statements {
+        statements,
+        block_statements,
+        conflicts,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use argdown_parser::parse;
+
+    #[test]
+    fn single_titled_definition_creates_one_entity() {
+        let doc = parse("[A]: claim").unwrap();
+        let s = build_statements(&doc);
+
+        assert_eq!(s.statements.len(), 1);
+        assert_eq!(s.statements[0].id, StatementId(0));
+        assert_eq!(s.statements[0].title, "A");
+        assert_eq!(s.statements[0].canonical_text.as_deref(), Some("claim"));
+        assert_eq!(s.statements[0].canonical_metadata, None);
+        assert!(s.conflicts.is_empty());
+        assert_eq!(s.block_statements, vec![Some(StatementId(0))]);
+    }
 }
