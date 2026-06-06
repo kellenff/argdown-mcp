@@ -16,7 +16,10 @@
 //! reuses [`crate::build_statements`] and [`crate::build_arguments`] for the
 //! seed registries and preserves their ids (prefix-correspondence).
 
-use argdown_core::{Block, Document, PcsItem, Relation, Span, Statement};
+use argdown_core::{
+    Block, Document, PcsItem, Relation, RelationDirection, RelationOperator, RelationTarget, Span,
+    Statement,
+};
 use std::collections::HashMap;
 
 pub use crate::arguments::{ArgumentConflict, ArgumentId};
@@ -116,6 +119,43 @@ pub enum PcsIssue {
     EmptyPcs { pcs_span: Span },
 }
 
+/// A node in the dialectical graph: a statement equivalence class or an
+/// argument. Edges connect these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Node {
+    Statement(StatementId),
+    Argument(ArgumentId),
+}
+
+/// The kind of a dialectical edge. `Contradictory` is symmetric but stored as a
+/// single directed edge; consumers treat it as symmetric. Undercut is recorded
+/// as an edge here; mapping it onto an inference step is B6's job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RelationKind {
+    Support,
+    Attack,
+    Undercut,
+    Contradictory,
+}
+
+/// A resolved directed dialectical edge between two nodes. Deduped on
+/// `(from, to, kind)` (the `span` of the first occurrence is kept).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Edge {
+    pub from: Node,
+    pub to: Node,
+    pub kind: RelationKind,
+    pub span: Span,
+}
+
+/// A relation that could not be resolved, surfaced as data (never `Result`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationIssue {
+    /// A relation with no enclosing element to attach to (no less-indented
+    /// node precedes it).
+    RelationWithoutParent { span: Span },
+}
+
 /// The first Layer-B `Model` aggregate: complete registries + resolved PCSs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Model {
@@ -136,6 +176,12 @@ pub struct Model {
     pub argument_conflicts: Vec<ArgumentConflict>,
     /// Internal PCS malformations.
     pub issues: Vec<PcsIssue>,
+    /// Deduped directed dialectical edges between nodes (by `(from, to, kind)`,
+    /// in first-occurrence source order). Top-level and PCS-interspersed
+    /// relations both contribute.
+    pub edges: Vec<Edge>,
+    /// Relations that could not be resolved (e.g. no parent).
+    pub relation_issues: Vec<RelationIssue>,
 }
 
 /// Build the complete semantic model for a parsed document.
@@ -178,7 +224,7 @@ pub fn build_model(document: &Document) -> Model {
             pcs: None,
         })
         .collect();
-    let by_title_arg: HashMap<String, ArgumentId> = model_arguments
+    let mut by_title_arg: HashMap<String, ArgumentId> = model_arguments
         .iter()
         .filter_map(|a| a.title.clone().map(|t| (t, a.id)))
         .collect();
@@ -203,51 +249,114 @@ pub fn build_model(document: &Document) -> Model {
         }
     }
 
-    // Phase 2: resolve each PCS — linkage, statement resolution, roles, binding.
+    // Phase 2: walk blocks — PCS resolution + dialectical edge resolution.
     let mut pcs: Vec<ResolvedPcs> = Vec::new();
     let mut block_pcs: Vec<Option<PcsId>> = Vec::with_capacity(document.blocks.len());
     let mut issues: Vec<PcsIssue> = Vec::new();
+    let mut edges: Vec<Edge> = Vec::new();
+    let mut relation_issues: Vec<RelationIssue> = Vec::new();
+    // Indent stack of the current node at each open level. A relation attaches
+    // to the nearest strictly-less-indented frame. Content anchors (statements,
+    // arguments, PCS statements — none of which carry an indent in the AST) sit
+    // at `ANCHOR_INDENT` (below any relation indent), so even an unindented
+    // relation (`indent 0`, which our parser accepts though the reference does
+    // not) still attaches to the statement above it.
+    let mut stack: Vec<Frame> = Vec::new();
 
     for (i, block) in document.blocks.iter().enumerate() {
-        let Block::Pcs(p) = block else {
-            block_pcs.push(None);
-            continue;
-        };
-        let pcs_id = PcsId(pcs.len());
-
-        // Linkage: strict adjacency. A PCS attaches to a named argument only
-        // when that argument block is the immediately-preceding block;
-        // otherwise it is its own anonymous argument.
-        let owner = match i.checked_sub(1).map(|prev| &document.blocks[prev]) {
-            Some(Block::Argument(a)) => match by_title_arg.get(&a.title) {
-                Some(&id) => {
-                    if model_arguments[id.0].pcs.is_none() {
-                        model_arguments[id.0].pcs = Some(pcs_id);
-                    }
-                    id
+        match block {
+            Block::Heading(_) => {
+                // A heading starts a new structural context for relations.
+                stack.clear();
+                block_pcs.push(None);
+            }
+            Block::Statement(s) => {
+                let node = top_level_statement_node(
+                    s,
+                    &mut model_statements,
+                    &mut by_title_stmt,
+                    &mut statement_conflicts,
+                    &mut conflict_idx,
+                    &mut canonical_spans,
+                );
+                enter(&mut stack, ANCHOR_INDENT, node);
+                block_pcs.push(None);
+            }
+            Block::Argument(a) => {
+                if let Some(&id) = by_title_arg.get(&a.title) {
+                    enter(&mut stack, ANCHOR_INDENT, Node::Argument(id));
                 }
-                None => mint_anonymous_argument(&mut model_arguments, pcs_id),
-            },
-            _ => mint_anonymous_argument(&mut model_arguments, pcs_id),
-        };
+                block_pcs.push(None);
+            }
+            Block::Relation(r) => {
+                resolve_relation(
+                    r,
+                    &mut stack,
+                    &mut model_statements,
+                    &mut by_title_stmt,
+                    &mut model_arguments,
+                    &mut by_title_arg,
+                    &mut statement_conflicts,
+                    &mut conflict_idx,
+                    &mut canonical_spans,
+                    &mut edges,
+                    &mut relation_issues,
+                );
+                block_pcs.push(None);
+            }
+            Block::Pcs(p) => {
+                let pcs_id = PcsId(pcs.len());
 
-        let items = resolve_pcs_items(
-            p,
-            &mut model_statements,
-            &mut by_title_stmt,
-            &mut statement_conflicts,
-            &mut conflict_idx,
-            &mut canonical_spans,
-            &mut issues,
-        );
+                // Linkage: strict adjacency. A PCS attaches to a named argument
+                // only when that argument block is the immediately-preceding
+                // block; otherwise it is its own anonymous argument.
+                let owner = match i.checked_sub(1).map(|prev| &document.blocks[prev]) {
+                    Some(Block::Argument(a)) => match by_title_arg.get(&a.title) {
+                        Some(&id) => {
+                            if model_arguments[id.0].pcs.is_none() {
+                                model_arguments[id.0].pcs = Some(pcs_id);
+                            }
+                            id
+                        }
+                        None => mint_anonymous_argument(&mut model_arguments, pcs_id),
+                    },
+                    _ => mint_anonymous_argument(&mut model_arguments, pcs_id),
+                };
 
-        pcs.push(ResolvedPcs {
-            id: pcs_id,
-            argument: owner,
-            items,
-            span: p.span,
-        });
-        block_pcs.push(Some(pcs_id));
+                let items = resolve_pcs_items(
+                    p,
+                    &mut model_statements,
+                    &mut by_title_stmt,
+                    &mut statement_conflicts,
+                    &mut conflict_idx,
+                    &mut canonical_spans,
+                    &mut issues,
+                );
+
+                // Interspersed PCS relations resolve in a PCS-local scope (their
+                // sources are the PCS's own statements, not the top-level stack).
+                resolve_pcs_relations(
+                    &items,
+                    &mut model_statements,
+                    &mut by_title_stmt,
+                    &mut model_arguments,
+                    &mut by_title_arg,
+                    &mut statement_conflicts,
+                    &mut conflict_idx,
+                    &mut canonical_spans,
+                    &mut edges,
+                    &mut relation_issues,
+                );
+
+                pcs.push(ResolvedPcs {
+                    id: pcs_id,
+                    argument: owner,
+                    items,
+                    span: p.span,
+                });
+                block_pcs.push(Some(pcs_id));
+            }
+        }
     }
 
     Model {
@@ -258,6 +367,259 @@ pub fn build_model(document: &Document) -> Model {
         statement_conflicts,
         argument_conflicts,
         issues,
+        edges,
+        relation_issues,
+    }
+}
+
+/// The stack indent of a content anchor (statement / argument / PCS statement).
+/// Below any relation indent (which is `>= 0`), so an unindented relation still
+/// attaches to the content above it.
+const ANCHOR_INDENT: isize = -1;
+
+/// A node on the indent stack: the current node at a given indentation level.
+#[derive(Debug, Clone, Copy)]
+struct Frame {
+    indent: isize,
+    node: Node,
+}
+
+/// Push `node` at `indent`, first popping any frames at the same or deeper
+/// indentation (monotonic discipline).
+fn enter(stack: &mut Vec<Frame>, indent: isize, node: Node) {
+    while stack.last().is_some_and(|f| f.indent >= indent) {
+        stack.pop();
+    }
+    stack.push(Frame { indent, node });
+}
+
+/// The node for a top-level statement: a titled one is already in the registry
+/// (from B3); a plain one is minted as a singleton so it can anchor relations.
+fn top_level_statement_node(
+    s: &Statement,
+    model_statements: &mut Vec<ModelStatement>,
+    by_title: &mut HashMap<String, StatementId>,
+    conflicts: &mut Vec<StatementConflict>,
+    conflict_idx: &mut HashMap<String, usize>,
+    canonical_spans: &mut HashMap<String, Span>,
+) -> Node {
+    if let Some(t) = &s.title
+        && let Some(&id) = by_title.get(t)
+    {
+        return Node::Statement(id);
+    }
+    Node::Statement(resolve_pcs_statement(
+        s,
+        model_statements,
+        by_title,
+        conflicts,
+        conflict_idx,
+        canonical_spans,
+    ))
+}
+
+/// Resolve a top-level relation against the indent stack: peek the parent
+/// (nearest strictly-less-indented frame), resolve the target to a node, emit
+/// the directed edge, then push the target so deeper relations nest under it.
+#[allow(clippy::too_many_arguments)]
+fn resolve_relation(
+    r: &Relation,
+    stack: &mut Vec<Frame>,
+    model_statements: &mut Vec<ModelStatement>,
+    by_title_stmt: &mut HashMap<String, StatementId>,
+    model_arguments: &mut Vec<ModelArgument>,
+    by_title_arg: &mut HashMap<String, ArgumentId>,
+    conflicts: &mut Vec<StatementConflict>,
+    conflict_idx: &mut HashMap<String, usize>,
+    canonical_spans: &mut HashMap<String, Span>,
+    edges: &mut Vec<Edge>,
+    relation_issues: &mut Vec<RelationIssue>,
+) {
+    let indent = r.indent as isize;
+    let Some(parent) = stack
+        .iter()
+        .rev()
+        .find(|f| f.indent < indent)
+        .map(|f| f.node)
+    else {
+        relation_issues.push(RelationIssue::RelationWithoutParent { span: r.span });
+        return;
+    };
+    let target = resolve_relation_target(
+        &r.target,
+        model_statements,
+        by_title_stmt,
+        model_arguments,
+        by_title_arg,
+        conflicts,
+        conflict_idx,
+        canonical_spans,
+    );
+    let (from, to) = orient(parent, target, &r.direction);
+    push_edge_if_new(edges, from, to, relation_kind(&r.operator), r.span);
+    enter(stack, indent, target);
+}
+
+/// Resolve the interspersed relations of one PCS in a local scope: each PCS
+/// statement is the base node for the relations that follow it; nested relations
+/// attach to the enclosing relation's target.
+#[allow(clippy::too_many_arguments)]
+fn resolve_pcs_relations(
+    items: &[ResolvedPcsItem],
+    model_statements: &mut Vec<ModelStatement>,
+    by_title_stmt: &mut HashMap<String, StatementId>,
+    model_arguments: &mut Vec<ModelArgument>,
+    by_title_arg: &mut HashMap<String, ArgumentId>,
+    conflicts: &mut Vec<StatementConflict>,
+    conflict_idx: &mut HashMap<String, usize>,
+    canonical_spans: &mut HashMap<String, Span>,
+    edges: &mut Vec<Edge>,
+    relation_issues: &mut Vec<RelationIssue>,
+) {
+    let mut stack: Vec<Frame> = Vec::new();
+    for item in items {
+        match item {
+            ResolvedPcsItem::Statement { statement, .. } => {
+                enter(&mut stack, ANCHOR_INDENT, Node::Statement(*statement));
+            }
+            ResolvedPcsItem::Relation(r) => {
+                let indent = r.indent as isize;
+                let Some(parent) = stack
+                    .iter()
+                    .rev()
+                    .find(|f| f.indent < indent)
+                    .map(|f| f.node)
+                else {
+                    relation_issues.push(RelationIssue::RelationWithoutParent { span: r.span });
+                    continue;
+                };
+                let target = resolve_relation_target(
+                    &r.target,
+                    model_statements,
+                    by_title_stmt,
+                    model_arguments,
+                    by_title_arg,
+                    conflicts,
+                    conflict_idx,
+                    canonical_spans,
+                );
+                let (from, to) = orient(parent, target, &r.direction);
+                push_edge_if_new(edges, from, to, relation_kind(&r.operator), r.span);
+                enter(&mut stack, indent, target);
+            }
+            ResolvedPcsItem::Inference { .. } => {}
+        }
+    }
+}
+
+/// Resolve a relation target to a node, minting/merging into the registry.
+#[allow(clippy::too_many_arguments)]
+fn resolve_relation_target(
+    target: &RelationTarget,
+    model_statements: &mut Vec<ModelStatement>,
+    by_title_stmt: &mut HashMap<String, StatementId>,
+    model_arguments: &mut Vec<ModelArgument>,
+    by_title_arg: &mut HashMap<String, ArgumentId>,
+    conflicts: &mut Vec<StatementConflict>,
+    conflict_idx: &mut HashMap<String, usize>,
+    canonical_spans: &mut HashMap<String, Span>,
+) -> Node {
+    match target {
+        RelationTarget::Statement(s) => Node::Statement(resolve_pcs_statement(
+            s,
+            model_statements,
+            by_title_stmt,
+            conflicts,
+            conflict_idx,
+            canonical_spans,
+        )),
+        RelationTarget::Argument(a) => {
+            Node::Argument(resolve_argument_node(a, model_arguments, by_title_arg))
+        }
+    }
+}
+
+/// Resolve a relation-target argument by title: merge with an existing argument
+/// (filling its canonical description on first definition) or mint a new one.
+///
+/// Asymmetry with statements (deferred): a relation-target argument *re*definition
+/// (`<A>: d1` then `- <A>: d2`) keeps the first description but does not record an
+/// `ArgumentConflict` — arguments carry no canonical-span bookkeeping here, and
+/// argument redefinition is far rarer than statement redefinition. Top-level
+/// argument conflicts are still captured by B4a.
+fn resolve_argument_node(
+    a: &argdown_core::Argument,
+    model_arguments: &mut Vec<ModelArgument>,
+    by_title_arg: &mut HashMap<String, ArgumentId>,
+) -> ArgumentId {
+    if let Some(&id) = by_title_arg.get(&a.title) {
+        if !a.is_reference && model_arguments[id.0].canonical_description.is_none() {
+            model_arguments[id.0].canonical_description = Some(a.description.clone());
+            model_arguments[id.0].canonical_metadata = a
+                .metadata
+                .as_ref()
+                .map(crate::metadata::parse_metadata)
+                .transpose()
+                .ok()
+                .flatten();
+        }
+        return id;
+    }
+    let id = ArgumentId(model_arguments.len());
+    let defined = !a.is_reference;
+    model_arguments.push(ModelArgument {
+        id,
+        title: Some(a.title.clone()),
+        canonical_description: defined.then(|| a.description.clone()),
+        canonical_metadata: defined
+            .then(|| {
+                a.metadata
+                    .as_ref()
+                    .map(crate::metadata::parse_metadata)
+                    .transpose()
+                    .ok()
+                    .flatten()
+            })
+            .flatten(),
+        pcs: None,
+    });
+    by_title_arg.insert(a.title.clone(), id);
+    id
+}
+
+/// Orient a relation into a directed `(from, to)` edge per its direction.
+fn orient(parent: Node, target: Node, direction: &RelationDirection) -> (Node, Node) {
+    match direction {
+        RelationDirection::Inbound => (target, parent),
+        RelationDirection::Outbound | RelationDirection::Bidirectional => (parent, target),
+    }
+}
+
+/// Map the parser's `RelationOperator` to a `RelationKind`.
+fn relation_kind(operator: &RelationOperator) -> RelationKind {
+    match operator {
+        RelationOperator::Support => RelationKind::Support,
+        RelationOperator::Attack => RelationKind::Attack,
+        RelationOperator::Undercut => RelationKind::Undercut,
+        RelationOperator::Contradictory => RelationKind::Contradictory,
+    }
+}
+
+/// Append an edge unless one with the same `(from, to, kind)` already exists
+/// (the first occurrence's span is kept). Linear scan — O(n) per insert, O(n²)
+/// over a document; fine at expected document sizes. If large dialectical maps
+/// ever matter, pair `edges` with a `HashSet<(Node, Node, RelationKind)>`.
+fn push_edge_if_new(edges: &mut Vec<Edge>, from: Node, to: Node, kind: RelationKind, span: Span) {
+    if !edges
+        .iter()
+        .any(|e| e.from == from && e.to == to && e.kind == kind)
+    {
+        edges.push(Edge {
+            from,
+            to,
+            kind,
+            span,
+        });
     }
 }
 
@@ -821,6 +1183,271 @@ mod tests {
         // Only the final PCS block is Some.
         assert_eq!(m.block_pcs.iter().filter(|b| b.is_some()).count(), 1);
         assert_eq!(*m.block_pcs.last().unwrap(), Some(PcsId(0)));
+    }
+
+    // ── B5: relations / edges ───────────────────────────────────────────────
+
+    fn stmt_node(m: &Model, title: &str) -> Node {
+        let id = m
+            .statements
+            .iter()
+            .find(|s| s.title.as_deref() == Some(title))
+            .expect("statement with that title")
+            .id;
+        Node::Statement(id)
+    }
+
+    fn arg_node(m: &Model, title: &str) -> Node {
+        let id = m
+            .arguments
+            .iter()
+            .find(|a| a.title.as_deref() == Some(title))
+            .expect("argument with that title")
+            .id;
+        Node::Argument(id)
+    }
+
+    fn has_edge(m: &Model, from: Node, to: Node, kind: RelationKind) -> bool {
+        m.edges
+            .iter()
+            .any(|e| e.from == from && e.to == to && e.kind == kind)
+    }
+
+    #[test]
+    fn inbound_support_points_target_to_parent() {
+        let m = build_model(&parse("[A]: a\n  + [B]: b").unwrap());
+        assert_eq!(m.edges.len(), 1);
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Support
+        ));
+    }
+
+    #[test]
+    fn outbound_support_points_parent_to_target() {
+        let m = build_model(&parse("[A]: a\n  +> [B]: b").unwrap());
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "A"),
+            stmt_node(&m, "B"),
+            RelationKind::Support
+        ));
+    }
+
+    #[test]
+    fn inbound_attack_points_target_to_parent() {
+        let m = build_model(&parse("[A]: a\n  - [B]: b").unwrap());
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Attack
+        ));
+    }
+
+    #[test]
+    fn contradictory_is_one_directed_edge() {
+        let m = build_model(&parse("[A]: a\n  >< [B]: b").unwrap());
+        assert_eq!(m.edges.len(), 1);
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "A"),
+            stmt_node(&m, "B"),
+            RelationKind::Contradictory
+        ));
+    }
+
+    #[test]
+    fn nested_relation_source_is_the_enclosing_target() {
+        let m = build_model(&parse("[A]: a\n  + [B]: b\n    - [C]: c").unwrap());
+        assert_eq!(m.edges.len(), 2);
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Support
+        ));
+        // The nested attack's source is B (the enclosing relation's target), not A.
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "C"),
+            stmt_node(&m, "B"),
+            RelationKind::Attack
+        ));
+    }
+
+    #[test]
+    fn plain_relation_target_becomes_a_singleton_node() {
+        let m = build_model(&parse("[A]: a\n  + plain reason").unwrap());
+        // One untitled singleton (the plain target) plus titled A.
+        let plain = m
+            .statements
+            .iter()
+            .find(|s| s.title.is_none() && s.canonical_text.as_deref() == Some("plain reason"))
+            .expect("plain target minted as a node");
+        assert!(has_edge(
+            &m,
+            Node::Statement(plain.id),
+            stmt_node(&m, "A"),
+            RelationKind::Support
+        ));
+    }
+
+    #[test]
+    fn argument_relation_target_is_an_argument_node() {
+        let m = build_model(&parse("[A]: a\n  - <Arg>: an arg").unwrap());
+        assert!(has_edge(
+            &m,
+            arg_node(&m, "Arg"),
+            stmt_node(&m, "A"),
+            RelationKind::Attack
+        ));
+    }
+
+    #[test]
+    fn duplicate_edges_are_deduped() {
+        let m = build_model(&parse("[A]: a\n  + [B]: b\n\n[B]\n  +> [A]").unwrap());
+        // `+ [B]` (B->A) and `+> [A]` under [B] (B->A) are the same edge.
+        assert_eq!(m.edges.len(), 1);
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Support
+        ));
+    }
+
+    #[test]
+    fn pcs_interspersed_relation_produces_an_edge() {
+        let m = build_model(&parse("<A>: d\n\n(1) [P]: p\n  +> [S]: s\n----\n(2) C").unwrap());
+        // The interspersed relation: P supports S.
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "P"),
+            stmt_node(&m, "S"),
+            RelationKind::Support
+        ));
+        // B4b roles are unaffected: P is a premise, C the main conclusion.
+        let items = &m.pcs[0].items;
+        assert_eq!(role_of(&items[0]), Role::Premise);
+        assert_eq!(role_of(items.last().unwrap()), Role::MainConclusion);
+    }
+
+    #[test]
+    fn unindented_relation_attaches_to_the_statement_above() {
+        // Our parser accepts an unindented (`indent 0`) relation; it must still
+        // attach to the statement above it (content anchors sit below indent 0).
+        let m = build_model(&parse("[A]: a\n+ [B]: b").unwrap());
+        assert_eq!(m.edges.len(), 1);
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Support
+        ));
+        assert!(m.relation_issues.is_empty());
+    }
+
+    #[test]
+    fn sibling_relations_share_their_parent() {
+        let m = build_model(&parse("[A]: a\n  + [B]: b\n  - [C]: c").unwrap());
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Support
+        ));
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "C"),
+            stmt_node(&m, "A"),
+            RelationKind::Attack
+        ));
+    }
+
+    #[test]
+    fn sibling_after_nested_dedents_to_ancestor() {
+        // D dedents back to A's level after C nested under B.
+        let m = build_model(&parse("[A]: a\n  + [B]: b\n    - [C]: c\n  - [D]: d").unwrap());
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "C"),
+            stmt_node(&m, "B"),
+            RelationKind::Attack
+        ));
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "D"),
+            stmt_node(&m, "A"),
+            RelationKind::Attack
+        ));
+    }
+
+    #[test]
+    fn undercut_relation_is_recorded() {
+        let m = build_model(&parse("[A]: a\n  _ [B]: b").unwrap());
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Undercut
+        ));
+    }
+
+    #[test]
+    fn argument_reference_anchors_a_relation() {
+        let m = build_model(&parse("<A>\n  + [B]: b").unwrap());
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            arg_node(&m, "A"),
+            RelationKind::Support
+        ));
+    }
+
+    #[test]
+    fn a_heading_resets_the_relation_context() {
+        // A heading breaks adjacency: a relation after it does not attach to a
+        // statement before it.
+        let m = build_model(&parse("[A]: a\n\n# H\n\n  + [B]: b").unwrap());
+        assert!(m.edges.is_empty());
+        assert!(
+            m.relation_issues
+                .iter()
+                .any(|i| matches!(i, RelationIssue::RelationWithoutParent { .. }))
+        );
+    }
+
+    #[test]
+    fn relation_without_a_parent_is_an_issue() {
+        // An indented relation with nothing above it has no parent.
+        let m = build_model(&parse("  + [B]: b").unwrap());
+        assert!(m.edges.is_empty());
+        assert!(
+            m.relation_issues
+                .iter()
+                .any(|i| matches!(i, RelationIssue::RelationWithoutParent { .. }))
+        );
+    }
+
+    #[test]
+    fn titled_relation_target_merges_with_top_level() {
+        let m = build_model(&parse("[A]: a\n\n[B]: b\n\n[A]\n  + [B]").unwrap());
+        // [B] as a relation target is the same node as the top-level [B].
+        let b_classes = m
+            .statements
+            .iter()
+            .filter(|s| s.title.as_deref() == Some("B"))
+            .count();
+        assert_eq!(b_classes, 1);
+        assert!(has_edge(
+            &m,
+            stmt_node(&m, "B"),
+            stmt_node(&m, "A"),
+            RelationKind::Support
+        ));
     }
 
     #[test]

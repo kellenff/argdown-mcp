@@ -15,8 +15,8 @@ mod statements;
 pub use arguments::{Argument, ArgumentConflict, ArgumentId, Arguments, build_arguments};
 pub use metadata::{MetadataError, Value, parse_metadata};
 pub use model::{
-    Model, ModelArgument, ModelStatement, PcsId, PcsIssue, ResolvedPcs, ResolvedPcsItem, Role,
-    build_model,
+    Edge, Model, ModelArgument, ModelStatement, Node, PcsId, PcsIssue, RelationIssue, RelationKind,
+    ResolvedPcs, ResolvedPcsItem, Role, build_model,
 };
 pub use sections::{Section, SectionId, Sections, build_sections};
 pub use statements::{Statement, StatementConflict, StatementId, Statements, build_statements};
