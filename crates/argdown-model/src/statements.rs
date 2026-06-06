@@ -327,10 +327,7 @@ mod tests {
         // same order (X at block 3, Y at block 5, Z at block 7). Conflicts
         // should come out in source order: X, Y, Z (the order the titles
         // first appeared, not the order the redefinitions happened).
-        let doc = parse(
-            "[X]: x1\n\n[Y]: y1\n\n[Z]: z1\n\n[X]: x2\n\n[Y]: y2\n\n[Z]: z2",
-        )
-        .unwrap();
+        let doc = parse("[X]: x1\n\n[Y]: y1\n\n[Z]: z1\n\n[X]: x2\n\n[Y]: y2\n\n[Z]: z2").unwrap();
         let s = build_statements(&doc);
         assert_eq!(s.statements.len(), 3);
         assert_eq!(s.conflicts.len(), 3);
