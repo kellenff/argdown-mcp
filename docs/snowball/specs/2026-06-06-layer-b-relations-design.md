@@ -111,11 +111,16 @@ fn enter(stack, indent, node) {
 }
 ```
 
-Walking `document.blocks` (extending the existing B4b pass):
+Walking `document.blocks` (extending the existing B4b pass). Content anchors
+(statements, arguments, PCS statements — none carry an indent in the AST) enter
+at a sentinel **below** any relation indent, so that even an unindented relation
+(`indent 0`, which our parser accepts though the reference rejects it) still
+attaches to the statement above it:
 
+- **`Block::Heading`** → `stack.clear()` — a heading resets the relation context
+  (a relation after a heading does not attach to a statement before it).
 - **`Block::Statement`** → resolve its node (titled: by-title; plain: mint a
-  singleton) and `enter(stack, 0, node)` — top-level statements/arguments sit at
-  base indent 0 (they carry no indent).
+  singleton) and enter it as an anchor (below any relation indent).
 - **`Block::Argument`** → `enter(stack, 0, Node::Argument(id))`.
 - **`Block::Pcs`** → after B4b resolution, resolve the PCS's interspersed
   relations in a **PCS-local scope**: each `PcsItem::Statement` is the base node
