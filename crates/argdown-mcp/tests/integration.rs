@@ -49,5 +49,19 @@ async fn lists_and_calls_the_three_tools() {
         .expect("export call");
     assert_ne!(exported.is_error, Some(true));
 
+    // dung_extensions → IN/OUT/UNDEC partition (not an error).
+    let dunged = client
+        .call_tool(
+            CallToolRequestParams::new("dung_extensions").with_arguments(
+                serde_json::json!({ "source": "<A>: a\n\n<B>: b\n  -> <A>" })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+            ),
+        )
+        .await
+        .expect("dung_extensions call");
+    assert_ne!(dunged.is_error, Some(true));
+
     client.cancel().await.ok();
 }
