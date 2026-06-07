@@ -1,7 +1,7 @@
 //! Pure tool logic: `&str` source → plain result data. No rmcp/protocol types.
 
 use argdown_core::Block;
-use argdown_model::{build_model, to_json};
+use argdown_model::{ArgumentId, build_model, dung_framework, grounded_extension, to_json};
 use argdown_parser::parse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -91,6 +91,44 @@ pub fn model_json(source: &str) -> Result<String, ToolError> {
     to_json(&model).map_err(|e| ToolError::Serialize(e.to_string()))
 }
 
+/// A reference to an argument by its arena id and (optional) title.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ArgRef {
+    pub id: usize,
+    pub title: Option<String>,
+}
+
+/// The grounded extension partition: accepted / defeated / undecided arguments.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DungResult {
+    #[serde(rename = "in")]
+    pub in_: Vec<ArgRef>,
+    pub out: Vec<ArgRef>,
+    pub undec: Vec<ArgRef>,
+}
+
+/// Parse `source`, build the model, project to a Dung AF, and return the
+/// grounded extension with arguments resolved to `{id, title}`.
+pub fn dung(source: &str) -> Result<DungResult, Diagnostic> {
+    let doc = parse(source).map_err(|e| Diagnostic { message: e.message, offset: e.offset })?;
+    let model = build_model(&doc);
+    let af = dung_framework(&model);
+    let labelling = grounded_extension(&af);
+    let to_refs = |ids: &[ArgumentId]| -> Vec<ArgRef> {
+        ids.iter()
+            .map(|id| ArgRef {
+                id: id.0,
+                title: model.arguments.get(id.0).and_then(|a| a.title.clone()),
+            })
+            .collect()
+    };
+    Ok(DungResult {
+        in_: to_refs(&labelling.in_),
+        out: to_refs(&labelling.out),
+        undec: to_refs(&labelling.undec),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +177,22 @@ mod tests {
             ToolError::Parse(d) => assert!(d.offset <= "[A]: x { y".len()),
             other => panic!("expected ToolError::Parse, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn dung_partitions_a_simple_attack() {
+        // <B> attacks <A>: B is unattacked (IN), A is defeated (OUT).
+        let d = dung("<A>: a\n\n<B>: b\n  -> <A>").expect("valid");
+        let titles =
+            |refs: &[ArgRef]| refs.iter().filter_map(|a| a.title.clone()).collect::<Vec<_>>();
+        assert_eq!(titles(&d.in_), vec!["B"]);
+        assert_eq!(titles(&d.out), vec!["A"]);
+        assert!(d.undec.is_empty());
+    }
+
+    #[test]
+    fn dung_returns_parse_error_with_offset() {
+        let d = dung("[A]: x { y").unwrap_err();
+        assert!(d.offset <= "[A]: x { y".len());
     }
 }
