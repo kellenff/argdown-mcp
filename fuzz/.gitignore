@@ -1,0 +1,10 @@
+target
+corpus
+artifacts
+coverage
+
+# Runs must copy seeds into the gitignored corpus dir (see below), but guard
+# against libFuzzer ever writing generated inputs into the committed seed set:
+# only hand-written `*.argdown` seeds belong here.
+seeds/*
+!seeds/*.argdown

@@ -1,0 +1,21 @@
+===
+title: Seed Document
+author: seed
+===
+
+# A section heading at level one
+
+[Claim]: a claim with *italic*, **bold**, a [link](http://example.com), @[Mentioned], @<Arg>, and a #tag {certainty: 0.8, source: book}
+
+<Argument>: a defended claim supported by reasons.
+
+[Parent]
+  + [Support]
+  - <Counter>
+    +> [Deeper]
+  >< [Contradiction]
+
+(1) [P1]: first premise
+(2) [P2]: second premise
+-- Modus Ponens --
+(3) [Conclusion]: the conclusion

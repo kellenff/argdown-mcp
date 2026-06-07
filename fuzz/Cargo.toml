@@ -1,0 +1,33 @@
+[package]
+name = "argdown-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+argdown-core = { path = "../crates/argdown-core" }
+argdown-parser = { path = "../crates/argdown-parser" }
+argdown-model = { path = "../crates/argdown-model" }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "model"
+path = "fuzz_targets/model.rs"
+test = false
+doc = false
+bench = false
+
+# An empty workspace table makes `fuzz/` its own workspace, so the root
+# workspace (`members = ["crates/*"]`) never compiles it — the stable build,
+# `clippy --all-targets`, and `test --workspace` gate stay nightly-free.
+[workspace]

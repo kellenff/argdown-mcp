@@ -1,0 +1,14 @@
+<A>: first argument
+  - <B>
+
+<B>: second argument
+  - <C>
+
+<C>: third argument
+  >< <A>
+
+<A>
+
+(1) [P]: a premise
+----
+(2) [Conclusion]: a conclusion drawn from it

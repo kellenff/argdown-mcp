@@ -1,0 +1,10 @@
+<Arg>: an argument with a multi-step structure
+
+(1) [P1]: premise one
+(2) [P2]: premise two
+-- from P1 and P2 --
+(3) [IC]: an intermediary conclusion
+(4) [P3]: another premise
+  + [Support]
+----
+(5) [Main]: the main conclusion
