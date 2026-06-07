@@ -1,10 +1,19 @@
-//! The rmcp boundary: adapts pure `tools` results into MCP tool responses.
+//! The rmcp boundary: adapts pure `argdown_tools` results into MCP tool responses.
 
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::{ErrorData, Json, ServerHandler, tool, tool_handler, tool_router};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::json;
 
-use crate::tools::{self, DungResult, ParseResult, SourceInput, ToolError};
+use argdown_tools::{DungResult, Format, ParseResult, ToolError, dung, model_export, summarize};
+
+/// Inline source input shared by every tool.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SourceInput {
+    /// The Argdown source text to analyze.
+    pub source: String,
+}
 
 /// The Argdown MCP server. Stateless.
 #[derive(Debug, Clone)]
@@ -20,7 +29,7 @@ impl ArgdownServer {
         &self,
         Parameters(SourceInput { source }): Parameters<SourceInput>,
     ) -> Json<ParseResult> {
-        Json(tools::summarize(&source))
+        Json(summarize(&source))
     }
 
     #[tool(
@@ -31,7 +40,7 @@ impl ArgdownServer {
         &self,
         Parameters(SourceInput { source }): Parameters<SourceInput>,
     ) -> Result<String, ErrorData> {
-        match tools::model_json(&source) {
+        match model_export(&source, Format::Json) {
             Ok(json) => Ok(json),
             Err(ToolError::Parse(d)) => Err(ErrorData::invalid_params(
                 d.message,
@@ -49,7 +58,7 @@ impl ArgdownServer {
         &self,
         Parameters(SourceInput { source }): Parameters<SourceInput>,
     ) -> Result<Json<DungResult>, ErrorData> {
-        match tools::dung(&source) {
+        match dung(&source) {
             Ok(result) => Ok(Json(result)),
             Err(d) => Err(ErrorData::invalid_params(
                 d.message,

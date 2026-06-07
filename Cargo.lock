@@ -43,9 +43,7 @@ dependencies = [
 name = "argdown-mcp"
 version = "0.1.0"
 dependencies = [
- "argdown-core",
- "argdown-model",
- "argdown-parser",
+ "argdown-tools",
  "rmcp",
  "schemars",
  "serde",
