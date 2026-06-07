@@ -49,10 +49,17 @@ jobs:
         run: |
           mkdir -p "fuzz/corpus/$TARGET"
           cp fuzz/seeds/*.argdown "fuzz/corpus/$TARGET/"
+      # `--target` is pinned to the gnu host triple on purpose. cargo-fuzz is
+      # installed as a prebuilt static *musl* binary, and it derives its default
+      # `--target` from the triple it was itself compiled for — so left implicit
+      # it builds the fuzz target for musl, where libc is statically linked and
+      # AddressSanitizer bails out ("sanitizer is incompatible with statically
+      # linked libc"). Pinning gnu keeps ASan happy and matches the toolchain's
+      # default (already-installed) std.
       - name: Fuzz (time-boxed smoke run)
         env:
           TARGET: ${{ matrix.target }}
-        run: cargo +nightly fuzz run "$TARGET" -- -max_total_time=60
+        run: cargo +nightly fuzz run "$TARGET" --target x86_64-unknown-linux-gnu -- -max_total_time=60
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@v4
