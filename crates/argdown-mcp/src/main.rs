@@ -1,13 +1,9 @@
 //! Argdown MCP server: serves `parse` / `export_model` / `dung_extensions`
 //! over stdio.
 
-mod server;
-mod tools;
-
+use argdown_mcp::server::ArgdownServer;
 use rmcp::ServiceExt;
 use rmcp::transport::io::stdio;
-
-use server::ArgdownServer;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
