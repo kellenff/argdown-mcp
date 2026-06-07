@@ -4,8 +4,8 @@
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
-use argdown_tools::summarize;
-use clap::{Parser, Subcommand};
+use argdown_tools::{Format, ToolError, model_export, summarize};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(
@@ -22,6 +22,27 @@ struct Cli {
 enum Command {
     /// Parse Argdown from stdin; print a syntactic summary as JSON.
     Parse,
+    /// Build the Layer B model from stdin and export it as JSON (default) or YAML.
+    Export {
+        /// Output format.
+        #[arg(short, long, value_enum, default_value = "json")]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum OutputFormat {
+    Json,
+    Yaml,
+}
+
+impl From<OutputFormat> for Format {
+    fn from(f: OutputFormat) -> Self {
+        match f {
+            OutputFormat::Json => Format::Json,
+            OutputFormat::Yaml => Format::Yaml,
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -56,6 +77,10 @@ fn run(cli: Cli) -> Result<String, String> {
                 }
             }
         }
+        Command::Export { format } => model_export(&source, format.into()).map_err(|e| match e {
+            ToolError::Parse(d) => format!("{} (at byte {})", d.message, d.offset),
+            ToolError::Serialize(msg) => msg,
+        }),
     }
 }
 
