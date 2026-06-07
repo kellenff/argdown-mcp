@@ -8,6 +8,7 @@ name = "argdown"
 path = "src/main.rs"
 
 [dependencies]
+argdown-model = { workspace = true }
 argdown-tools = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 serde_json = { workspace = true }
