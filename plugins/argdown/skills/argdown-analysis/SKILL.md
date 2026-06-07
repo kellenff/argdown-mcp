@@ -1,6 +1,6 @@
 ---
 name: argdown-analysis
-description: Use when analyzing argument structure, building or inspecting dialectical maps, or asking which arguments survive/"win" in a debate — i.e. working with Argdown documents or argumentation. Routes to the argdown MCP tools (parse, export_model, inspect_af, extensions, accepts).
+description: Use when analyzing argument structure, building or inspecting dialectical maps, or asking which arguments survive/"win" in a debate — i.e. working with Argdown documents or argumentation. Routes to the argdown MCP tools (parse, export_model, inspect_af, extensions, accepts, qbaf_evaluate).
 ---
 
 # Argdown Analysis
@@ -13,6 +13,7 @@ The `argdown` MCP server exposes tools over Argdown source. Prefer passing the d
 - **`extensions`** — compute Dung-style extensions under the chosen semantics. Optional `semantics`: `"grounded"`, `"preferred"` (default), `"stable"`, or `"complete"`. Returns labellings (3-valued IN/OUT/UNDEC per argument) and extension sets. **Canonical tool** for "which arguments survive?" — prefer this over the deprecated alias below.
 - **`accepts`** — point query: is a specific argument accepted? Requires `argument_id` (arena id). Optional `semantics` (default `"preferred"`) and `mode`: `"credulous"` (default, IN in ≥1 extension) or `"skeptical"` (IN in all extensions). Returns `accepted`, `status`, and a structured `witness` explaining why.
 - **`dung_extensions`** — **DEPRECATED** — use `extensions` with `semantics: "grounded"` instead. Will be removed in v2. Returns the grounded IN/OUT/UNDEC partition only.
+- **`qbaf_evaluate`** — compute QBAF DF-QuAD degrees for arguments. Optional `threshold` (default `0.5`). Returns per-argument `base`, `final_degree`, and `status` (`accepted` / `rejected` / `undec`). Weights: argument metadata `weight` sets the base degree (default `0.5`); relation metadata `weight` on a support/attack edge overrides for that edge.
 
 ## When to use
 
@@ -21,5 +22,6 @@ The `argdown` MCP server exposes tools over Argdown source. Prefer passing the d
 - The user wants the projected attack graph or cycle/SCC structure → `inspect_af`.
 - The user asks which position "wins", which arguments are defeated, or for the accepted set of a debate → `extensions` (default `semantics: "preferred"`; use `"grounded"` for the unique well-founded labelling).
 - The user asks whether a **specific** argument is accepted, or credulous vs skeptical → `accepts` with `argument_id` and optional `mode`.
+- The user asks for weighted/quantitative strength, ranked acceptability, or "how strong" an argument is → `qbaf_evaluate` (uses support/attack edge weights from the model).
 
-Validate with `parse` first, then call `inspect_af`, `export_model`, and/or `extensions` (or `accepts`) as the question demands.
+Validate with `parse` first, then call `inspect_af`, `export_model`, `extensions` / `accepts`, and/or `qbaf_evaluate` as the question demands.

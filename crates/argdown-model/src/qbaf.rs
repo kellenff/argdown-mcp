@@ -200,11 +200,8 @@ pub fn df_quad_run(qbaf: &QbafFramework, max_iterations: usize) -> Result<DfQuad
         });
     }
 
-    let mut degrees: HashMap<ArgumentId, f64> = qbaf
-        .nodes
-        .iter()
-        .map(|n| (n.id, n.base_degree))
-        .collect();
+    let mut degrees: HashMap<ArgumentId, f64> =
+        qbaf.nodes.iter().map(|n| (n.id, n.base_degree)).collect();
 
     for _ in 0..max_iterations {
         let next = df_quad_step(qbaf, &degrees)?;
@@ -347,7 +344,8 @@ mod tests {
     #[test]
     fn df_quad_attack_decreases_degree() {
         // B (0.5) attacks A (0.8) with edge weight 0.5 → A = clamp(0.8 - 0.5*0.5) = 0.55.
-        let m = build_model(&parse("<a>: A {weight: 0.8}\n  - <b>\n\n<b>: B {weight: 0.5}").unwrap());
+        let m =
+            build_model(&parse("<a>: A {weight: 0.8}\n  - <b>\n\n<b>: B {weight: 0.5}").unwrap());
         let qbaf = project_qbaf(&m).unwrap();
         let degrees = df_quad(&qbaf, DEFAULT_MAX_ITERATIONS).unwrap();
         let a = arg_id(&m, "a");

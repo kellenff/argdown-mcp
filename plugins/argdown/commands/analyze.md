@@ -19,5 +19,6 @@ Input is `$ARGUMENTS` — either inline Argdown source or a path to a file.
    - the preferred extension labelling — which arguments are IN (accepted), OUT (defeated), UNDEC (undecided) in the primary labelling;
    - one line per argument explaining why it survives or is defeated (e.g. "B is unattacked → IN; A is attacked by B → OUT").
    - If the user asked about a specific argument or credulous vs skeptical acceptance, also call `accepts` with the relevant `argument_id` and `mode`.
+   - If the user asked about weighted strength, quantitative acceptability, or ranking arguments by degree, call `qbaf_evaluate` (default `threshold: 0.5`). Weights come from argument metadata `weight` (base degree, default 0.5) and relation metadata `weight` (overrides for that edge).
 
 Pass the document inline as `source` to the tools.

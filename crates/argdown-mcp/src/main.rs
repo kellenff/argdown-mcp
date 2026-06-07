@@ -1,5 +1,5 @@
-//! Argdown MCP server: serves `parse` / `export_model` / `dung_extensions`
-//! over stdio.
+//! Argdown MCP server: serves parse, export_model, inspect_af, extensions,
+//! accepts, qbaf_evaluate, and the deprecated dung_extensions alias over stdio.
 
 use argdown_mcp::server::ArgdownServer;
 use rmcp::ServiceExt;
