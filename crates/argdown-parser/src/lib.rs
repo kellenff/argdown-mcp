@@ -633,6 +633,7 @@ mod tests {
                     inlines: vec![],
                     metadata: None,
                 }),
+                metadata: None,
                 span: Span { start: 0, end: 5 },
             })]
         );

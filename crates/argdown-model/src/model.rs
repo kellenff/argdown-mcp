@@ -148,6 +148,7 @@ pub struct Edge {
     pub to: Node,
     pub kind: RelationKind,
     pub span: Span,
+    pub canonical_metadata: Option<Value>,
 }
 
 /// A relation that could not be resolved, surfaced as data (never `Result`).
@@ -425,7 +426,13 @@ impl Builder {
         };
         let target = self.resolve_relation_target(&r.target);
         let (from, to) = orient(parent, target, &r.direction);
-        self.push_edge_if_new(from, to, relation_kind(&r.operator), r.span);
+        self.push_edge_if_new(
+            from,
+            to,
+            relation_kind(&r.operator),
+            r.span,
+            parse_meta(r.metadata.as_ref()),
+        );
         enter(stack, indent, target);
     }
 
@@ -453,7 +460,13 @@ impl Builder {
                     };
                     let target = self.resolve_relation_target(&r.target);
                     let (from, to) = orient(parent, target, &r.direction);
-                    self.push_edge_if_new(from, to, relation_kind(&r.operator), r.span);
+                    self.push_edge_if_new(
+                        from,
+                        to,
+                        relation_kind(&r.operator),
+                        r.span,
+                        parse_meta(r.metadata.as_ref()),
+                    );
                     enter(&mut stack, indent, target);
                 }
                 ResolvedPcsItem::Inference { .. } => {}
@@ -520,7 +533,14 @@ impl Builder {
     /// O(n²) over a document; fine at expected document sizes. If large
     /// dialectical maps ever matter, pair `edges` with a
     /// `HashSet<(Node, Node, RelationKind)>`.
-    fn push_edge_if_new(&mut self, from: Node, to: Node, kind: RelationKind, span: Span) {
+    fn push_edge_if_new(
+        &mut self,
+        from: Node,
+        to: Node,
+        kind: RelationKind,
+        span: Span,
+        canonical_metadata: Option<Value>,
+    ) {
         if !self
             .edges
             .iter()
@@ -531,6 +551,7 @@ impl Builder {
                 to,
                 kind,
                 span,
+                canonical_metadata,
             });
         }
     }
@@ -959,6 +980,38 @@ mod tests {
             .as_ref()
             .expect("P had metadata");
         assert!(matches!(meta, Value::Mapping(map) if map.contains_key("key")));
+    }
+
+    #[test]
+    fn relation_metadata_is_preserved_on_edge() {
+        let m = build_model(
+            &parse("<A>: a {weight: 0.3}\n  + {weight: 0.9} <B>: b\n\n<B>: b").unwrap(),
+        );
+        let support = m
+            .edges
+            .iter()
+            .find(|e| e.kind == RelationKind::Support)
+            .expect("support edge");
+        assert_eq!(
+            support
+                .canonical_metadata
+                .as_ref()
+                .and_then(|v| v.get("weight"))
+                .and_then(|v| v.as_f64()),
+            Some(0.9)
+        );
+        let a = m
+            .arguments
+            .iter()
+            .find(|a| a.title.as_deref() == Some("A"))
+            .expect("argument A");
+        assert_eq!(
+            a.canonical_metadata
+                .as_ref()
+                .and_then(|v| v.get("weight"))
+                .and_then(|v| v.as_f64()),
+            Some(0.3)
+        );
     }
 
     // ── Degenerate cases (issues) ───────────────────────────────────────────
