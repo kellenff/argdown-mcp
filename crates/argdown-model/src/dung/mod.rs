@@ -16,6 +16,10 @@
 //! The AF is a derived *view* of the Model (for the solver), not document data,
 //! so it lives outside the `Model` as standalone projection functions.
 
+mod scc;
+
+pub use scc::{AfMetadata, analyze_af};
+
 use crate::{ArgumentId, Model, Node, RelationKind};
 use std::collections::HashMap;
 
