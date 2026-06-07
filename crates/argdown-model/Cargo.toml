@@ -9,3 +9,8 @@ noyalib = { workspace = true }
 
 [dev-dependencies]
 argdown-parser = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "model"
+harness = false
