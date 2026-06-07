@@ -64,12 +64,19 @@ pub fn summarize(source: &str) -> ParseResult {
                     Block::Pcs(_) => summary.pcs += 1,
                 }
             }
-            ParseResult { ok: true, summary: Some(summary), diagnostic: None }
+            ParseResult {
+                ok: true,
+                summary: Some(summary),
+                diagnostic: None,
+            }
         }
         Err(e) => ParseResult {
             ok: false,
             summary: None,
-            diagnostic: Some(Diagnostic { message: e.message, offset: e.offset }),
+            diagnostic: Some(Diagnostic {
+                message: e.message,
+                offset: e.offset,
+            }),
         },
     }
 }
@@ -85,8 +92,12 @@ pub enum ToolError {
 
 /// Parse `source`, build the Layer B model, and return it as pretty-printed JSON.
 pub fn model_json(source: &str) -> Result<String, ToolError> {
-    let doc = parse(source)
-        .map_err(|e| ToolError::Parse(Diagnostic { message: e.message, offset: e.offset }))?;
+    let doc = parse(source).map_err(|e| {
+        ToolError::Parse(Diagnostic {
+            message: e.message,
+            offset: e.offset,
+        })
+    })?;
     let model = build_model(&doc);
     to_json(&model).map_err(|e| ToolError::Serialize(e.to_string()))
 }
@@ -110,7 +121,10 @@ pub struct DungResult {
 /// Parse `source`, build the model, project to a Dung AF, and return the
 /// grounded extension with arguments resolved to `{id, title}`.
 pub fn dung(source: &str) -> Result<DungResult, Diagnostic> {
-    let doc = parse(source).map_err(|e| Diagnostic { message: e.message, offset: e.offset })?;
+    let doc = parse(source).map_err(|e| Diagnostic {
+        message: e.message,
+        offset: e.offset,
+    })?;
     let model = build_model(&doc);
     let af = dung_framework(&model);
     let labelling = grounded_extension(&af);
@@ -144,7 +158,10 @@ mod tests {
         assert_eq!(s.statements, 1);
         assert_eq!(s.arguments, 1);
         assert_eq!(s.pcs, 1);
-        assert_eq!(s.blocks, s.headings + s.statements + s.arguments + s.relations + s.pcs);
+        assert_eq!(
+            s.blocks,
+            s.headings + s.statements + s.arguments + s.relations + s.pcs
+        );
         assert!(r.diagnostic.is_none());
     }
 
@@ -183,8 +200,11 @@ mod tests {
     fn dung_partitions_a_simple_attack() {
         // <B> attacks <A>: B is unattacked (IN), A is defeated (OUT).
         let d = dung("<A>: a\n\n<B>: b\n  -> <A>").expect("valid");
-        let titles =
-            |refs: &[ArgRef]| refs.iter().filter_map(|a| a.title.clone()).collect::<Vec<_>>();
+        let titles = |refs: &[ArgRef]| {
+            refs.iter()
+                .filter_map(|a| a.title.clone())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(titles(&d.in_), vec!["B"]);
         assert_eq!(titles(&d.out), vec!["A"]);
         assert!(d.undec.is_empty());

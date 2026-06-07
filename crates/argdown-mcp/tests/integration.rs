@@ -1,6 +1,6 @@
 use argdown_mcp::server::ArgdownServer;
-use rmcp::model::CallToolRequestParams;
 use rmcp::ServiceExt;
+use rmcp::model::CallToolRequestParams;
 
 #[tokio::test]
 async fn lists_and_calls_the_three_tools() {
@@ -23,24 +23,28 @@ async fn lists_and_calls_the_three_tools() {
 
     // parse → ok summary.
     let parsed = client
-        .call_tool(CallToolRequestParams::new("parse").with_arguments(
-            serde_json::json!({ "source": "<A>: a" })
-                .as_object()
-                .cloned()
-                .unwrap(),
-        ))
+        .call_tool(
+            CallToolRequestParams::new("parse").with_arguments(
+                serde_json::json!({ "source": "<A>: a" })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+            ),
+        )
         .await
         .expect("parse call");
     assert_ne!(parsed.is_error, Some(true));
 
     // export_model → JSON text (not an error).
     let exported = client
-        .call_tool(CallToolRequestParams::new("export_model").with_arguments(
-            serde_json::json!({ "source": "<A>: a\n\n(1) P\n----\n(2) C" })
-                .as_object()
-                .cloned()
-                .unwrap(),
-        ))
+        .call_tool(
+            CallToolRequestParams::new("export_model").with_arguments(
+                serde_json::json!({ "source": "<A>: a\n\n(1) P\n----\n(2) C" })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+            ),
+        )
         .await
         .expect("export call");
     assert_ne!(exported.is_error, Some(true));

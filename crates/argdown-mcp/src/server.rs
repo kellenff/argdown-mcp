@@ -16,7 +16,10 @@ impl ArgdownServer {
         name = "parse",
         description = "Parse Argdown source; returns a syntactic summary, or a diagnostic with a byte offset on failure. Prefer inline `source`."
     )]
-    fn parse(&self, Parameters(SourceInput { source }): Parameters<SourceInput>) -> Json<ParseResult> {
+    fn parse(
+        &self,
+        Parameters(SourceInput { source }): Parameters<SourceInput>,
+    ) -> Json<ParseResult> {
         Json(tools::summarize(&source))
     }
 
@@ -30,9 +33,10 @@ impl ArgdownServer {
     ) -> Result<String, ErrorData> {
         match tools::model_json(&source) {
             Ok(json) => Ok(json),
-            Err(ToolError::Parse(d)) => {
-                Err(ErrorData::invalid_params(d.message, Some(json!({ "offset": d.offset }))))
-            }
+            Err(ToolError::Parse(d)) => Err(ErrorData::invalid_params(
+                d.message,
+                Some(json!({ "offset": d.offset })),
+            )),
             Err(ToolError::Serialize(msg)) => Err(ErrorData::internal_error(msg, None)),
         }
     }
@@ -47,7 +51,10 @@ impl ArgdownServer {
     ) -> Result<Json<DungResult>, ErrorData> {
         match tools::dung(&source) {
             Ok(result) => Ok(Json(result)),
-            Err(d) => Err(ErrorData::invalid_params(d.message, Some(json!({ "offset": d.offset })))),
+            Err(d) => Err(ErrorData::invalid_params(
+                d.message,
+                Some(json!({ "offset": d.offset })),
+            )),
         }
     }
 }
