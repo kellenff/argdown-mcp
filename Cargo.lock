@@ -75,6 +75,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argdown-tools"
+version = "0.1.0"
+dependencies = [
+ "argdown-core",
+ "argdown-model",
+ "argdown-parser",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
