@@ -16,12 +16,14 @@
 //! The AF is a derived *view* of the Model (for the solver), not document data,
 //! so it lives outside the `Model` as standalone projection functions.
 
+mod grounded;
+mod propagate;
 mod scc;
 
+pub use grounded::grounded_extension;
 pub use scc::{AfMetadata, analyze_af};
 
 use crate::{ArgumentId, Model, Node, RelationKind};
-use std::collections::HashMap;
 
 /// A Dung abstract argumentation framework: arguments + a binary attack
 /// relation. A sharp projection of the [`Model`] (argument→argument `Attack`
@@ -70,64 +72,6 @@ pub fn dung_framework(model: &Model) -> ArgumentationFramework {
     }
 
     ArgumentationFramework { arguments, attacks }
-}
-
-/// Compute the unique grounded labelling of an AF via the characteristic-
-/// function least-fixpoint: an argument is IN once all its attackers are OUT
-/// (vacuously, if unattacked), OUT once any attacker is IN; iterate to a
-/// fixpoint, and whatever remains (cycles, self-attacks) is UNDEC. Total.
-pub fn grounded_extension(af: &ArgumentationFramework) -> GroundedLabelling {
-    /// 0 = undecided, 1 = in, 2 = out.
-    const UNDEC: u8 = 0;
-    const IN: u8 = 1;
-    const OUT: u8 = 2;
-
-    let mut attackers_of: HashMap<ArgumentId, Vec<ArgumentId>> = HashMap::new();
-    for &(from, to) in &af.attacks {
-        attackers_of.entry(to).or_default().push(from);
-    }
-
-    let mut state: HashMap<ArgumentId, u8> = af.arguments.iter().map(|&a| (a, UNDEC)).collect();
-
-    loop {
-        let mut changed = false;
-        for &arg in &af.arguments {
-            if state[&arg] != UNDEC {
-                continue;
-            }
-            let attackers = attackers_of.get(&arg).map(Vec::as_slice).unwrap_or(&[]);
-            // For an AF from `dung_framework` every attacker is in `state`;
-            // `unwrap_or(UNDEC)` keeps the lookup total for a hand-built AF whose
-            // attacks reference an argument not in `arguments` (a phantom
-            // attacker counts as undecided).
-            if attackers
-                .iter()
-                .all(|a| state.get(a).copied().unwrap_or(UNDEC) == OUT)
-            {
-                state.insert(arg, IN);
-                changed = true;
-            } else if attackers
-                .iter()
-                .any(|a| state.get(a).copied().unwrap_or(UNDEC) == IN)
-            {
-                state.insert(arg, OUT);
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    let mut labelling = GroundedLabelling::default();
-    for &arg in &af.arguments {
-        match state[&arg] {
-            IN => labelling.in_.push(arg),
-            OUT => labelling.out.push(arg),
-            _ => labelling.undec.push(arg),
-        }
-    }
-    labelling
 }
 
 #[cfg(test)]
