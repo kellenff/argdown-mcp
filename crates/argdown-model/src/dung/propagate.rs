@@ -4,7 +4,8 @@ use crate::ArgumentId;
 use super::ArgumentationFramework;
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Label {
     In,
     Out,
