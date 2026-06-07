@@ -3,6 +3,7 @@
 //! For now this just exercises the parser to prove the workspace wires up.
 //! The MCP protocol layer is future work.
 
+mod server;
 mod tools;
 
 use argdown_core::Document;
