@@ -88,7 +88,7 @@ permissions:
   id-token: write        # added: OIDC for keyless signing
   attestations: write    # added: write the attestation
 # ...
-- uses: actions/attest-build-provenance@v1
+- uses: actions/attest-build-provenance@v4
   with:
     subject-path: 'dist/*.tar.gz,dist/*.zip'
 ```
