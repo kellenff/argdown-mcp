@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "argdown-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argdown-tools",
  "clap",
@@ -87,14 +87,14 @@ dependencies = [
 
 [[package]]
 name = "argdown-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "argdown-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argdown-tools",
  "rmcp",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "argdown-model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argdown-core",
  "argdown-parser",
@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "argdown-parser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argdown-core",
  "criterion",
@@ -127,7 +127,7 @@ dependencies = [
 
 [[package]]
 name = "argdown-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argdown-core",
  "argdown-model",
