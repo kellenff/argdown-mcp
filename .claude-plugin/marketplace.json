@@ -1,0 +1,15 @@
+{
+  "name": "argdown",
+  "owner": {
+    "name": "Kellen Frodelius-Fujimoto",
+    "email": "kellen@kellenfujimoto.com",
+    "url": "https://github.com/kellenff"
+  },
+  "plugins": [
+    {
+      "name": "argdown",
+      "source": "./plugins/argdown",
+      "description": "Argdown argumentation toolchain MCP server: parse Argdown, export the resolved model, and compute Dung grounded extensions (which arguments survive)."
+    }
+  ]
+}

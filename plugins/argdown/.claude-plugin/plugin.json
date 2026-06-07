@@ -1,0 +1,12 @@
+{
+  "name": "argdown",
+  "version": "0.1.1",
+  "description": "Argdown argumentation toolchain: parse Argdown, export the resolved Layer B model, and compute the Dung grounded extension (which arguments survive once all attacks resolve) over an MCP server.",
+  "author": {
+    "name": "Kellen Frodelius-Fujimoto",
+    "email": "kellen@kellenfujimoto.com",
+    "url": "https://github.com/kellenff"
+  },
+  "homepage": "https://github.com/kellenff/argdown-mcp",
+  "repository": "https://github.com/kellenff/argdown-mcp"
+}
