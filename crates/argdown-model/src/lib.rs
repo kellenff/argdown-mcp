@@ -9,6 +9,8 @@
 
 mod arguments;
 mod dung;
+mod export;
+mod import;
 mod metadata;
 mod model;
 mod sections;
@@ -17,6 +19,8 @@ mod tags;
 
 pub use arguments::{Argument, ArgumentConflict, ArgumentId, Arguments, build_arguments};
 pub use dung::{ArgumentationFramework, GroundedLabelling, dung_framework, grounded_extension};
+pub use export::{to_json, to_yaml};
+pub use import::{Arena, ImportError, InvariantViolation, RefSource, from_json, from_yaml};
 pub use metadata::{MetadataError, Value, parse_metadata};
 pub use model::{
     Edge, Model, ModelArgument, ModelStatement, Node, PcsId, PcsIssue, RelationIssue, RelationKind,

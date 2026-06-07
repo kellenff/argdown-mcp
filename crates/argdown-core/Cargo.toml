@@ -4,3 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+serde = { workspace = true, optional = true }
+
+[features]
+# Opt-in `serde::Serialize` on the AST types. Kept off by default so the parser
+# and fuzz targets don't compile serde; `argdown-model` enables it for export.
+serde = ["dep:serde"]

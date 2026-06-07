@@ -29,11 +29,11 @@ pub use crate::metadata::Value;
 pub use crate::statements::{StatementConflict, StatementId};
 
 /// Stable, source-order id; indexes `Model::pcs`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct PcsId(pub usize);
 
 /// Positional role of a statement within a PCS.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Role {
     Premise,
     IntermediaryConclusion,
@@ -43,7 +43,7 @@ pub enum Role {
 /// One resolved item in a PCS, in source order. The enum variant carries the
 /// item's resolved role/binding. `items` indices are stable for the lifetime
 /// of the [`ResolvedPcs`]; consumers must not filter or reorder in place.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ResolvedPcsItem {
     Statement {
         role: Role,
@@ -68,7 +68,7 @@ pub enum ResolvedPcsItem {
 }
 
 /// A resolved premise-conclusion structure, owned by exactly one argument.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedPcs {
     pub id: PcsId,
     /// Owning argument — a named B4a argument (immediately preceding) or a
@@ -81,7 +81,7 @@ pub struct ResolvedPcs {
 /// Complete statement equivalence class. `title: None` ⇔ an untitled PCS
 /// statement (a singleton). Prefix-correspondence: `Model::statements[i]` for
 /// `i` below B3's count equals B3's `StatementId(i)` entity.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModelStatement {
     pub id: StatementId,
     pub title: Option<String>,
@@ -91,7 +91,7 @@ pub struct ModelStatement {
 
 /// Complete argument entity. `title: None` ⇔ an anonymous argument (a
 /// standalone PCS). Prefix-correspondence with B4a's `Arguments` arena.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModelArgument {
     pub id: ArgumentId,
     pub title: Option<String>,
@@ -108,7 +108,7 @@ pub struct ModelArgument {
 }
 
 /// Genuine internal PCS malformations, surfaced as data (never `Result`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PcsIssue {
     /// An inference line has no statement to conclude (trailing, or only a
     /// relation follows it).
@@ -123,7 +123,7 @@ pub enum PcsIssue {
 
 /// A node in the dialectical graph: a statement equivalence class or an
 /// argument. Edges connect these.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Node {
     Statement(StatementId),
     Argument(ArgumentId),
@@ -132,7 +132,7 @@ pub enum Node {
 /// The kind of a dialectical edge. `Contradictory` is symmetric but stored as a
 /// single directed edge; consumers treat it as symmetric. Undercut is recorded
 /// as an edge here; mapping it onto an inference step is B6's job.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RelationKind {
     Support,
     Attack,
@@ -142,7 +142,7 @@ pub enum RelationKind {
 
 /// A resolved directed dialectical edge between two nodes. Deduped on
 /// `(from, to, kind)` (the `span` of the first occurrence is kept).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Edge {
     pub from: Node,
     pub to: Node,
@@ -151,7 +151,7 @@ pub struct Edge {
 }
 
 /// A relation that could not be resolved, surfaced as data (never `Result`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RelationIssue {
     /// A relation with no enclosing element to attach to (no less-indented
     /// node precedes it).
@@ -159,7 +159,7 @@ pub enum RelationIssue {
 }
 
 /// The first Layer-B `Model` aggregate: complete registries + resolved PCSs.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Model {
     /// Complete statement registry (titled top-level + titled-in-PCS merged by
     /// title + untitled singletons). Prefix equals B3's arena.

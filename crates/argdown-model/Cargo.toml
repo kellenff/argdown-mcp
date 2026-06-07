@@ -4,8 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-argdown-core = { workspace = true }
+argdown-core = { workspace = true, features = ["serde"] }
 noyalib = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 argdown-parser = { workspace = true }

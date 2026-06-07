@@ -16,7 +16,7 @@ pub use crate::metadata::Value;
 ///
 /// Stable within a single parse only (the source is re-parsed fresh each
 /// time); not designed to survive edits. Matches `SectionId` from B1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct StatementId(pub usize);
 
 /// One statement entity in the equivalence class.
@@ -38,7 +38,7 @@ pub struct Statement {
 
 /// A redefinition conflict: a title was defined more than once. Surfaced
 /// as data on `Statements::conflicts`, not as a `Result` failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StatementConflict {
     pub title: String,
     /// Source span of the first (canonical) definition.

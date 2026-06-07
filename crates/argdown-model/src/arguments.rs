@@ -16,7 +16,7 @@ pub use crate::metadata::Value;
 ///
 /// Stable within a single parse only (the source is re-parsed fresh each
 /// time); not designed to survive edits. Matches `StatementId` from B3.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ArgumentId(pub usize);
 
 /// One argument entity in the equivalence class.
@@ -39,7 +39,7 @@ pub struct Argument {
 
 /// A redefinition conflict: a title was defined more than once. Surfaced
 /// as data on `Arguments::conflicts`, not as a `Result` failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ArgumentConflict {
     pub title: String,
     /// Source span of the first (canonical) definition.

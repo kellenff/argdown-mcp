@@ -3,6 +3,7 @@
 use std::ops::Range;
 
 /// A byte range into the original source.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
@@ -20,6 +21,7 @@ impl From<Range<usize>> for Span {
 
 /// A parsed Argdown document: optional `===…===` frontmatter plus a flat
 /// sequence of top-level blocks.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Document {
     pub blocks: Vec<Block>,
@@ -29,6 +31,7 @@ pub struct Document {
 }
 
 /// A top-level block.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Block {
     Heading(Heading),
@@ -39,6 +42,7 @@ pub enum Block {
 }
 
 /// An ATX heading (`#`–`######`).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Heading {
     pub level: u8,
@@ -48,6 +52,7 @@ pub struct Heading {
 }
 
 /// A statement: plain text, a titled definition (`[T]: x`), or a reference (`[T]`).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Statement {
     pub title: Option<String>,
@@ -59,6 +64,7 @@ pub struct Statement {
 }
 
 /// An argument: a titled definition (`<T>: desc`) or a reference (`<T>`).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Argument {
     pub title: String,
@@ -71,6 +77,7 @@ pub struct Argument {
 
 /// A trailing `{yaml}` metadata block: raw inner content + source span. The
 /// content is not YAML-parsed here (a Layer-B utility does that).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Metadata {
     /// Inner content, verbatim (between `{` and `}`).
@@ -81,6 +88,7 @@ pub struct Metadata {
 
 /// One inline element inside a statement/argument body. `span` is the full
 /// source extent of the element (opening delimiter through closing delimiter).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Inline {
     pub kind: InlineKind,
@@ -88,6 +96,7 @@ pub struct Inline {
 }
 
 /// The kind of an inline element, with its extracted data.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InlineKind {
     Bold,
@@ -101,6 +110,7 @@ pub enum InlineKind {
 /// A relation line (`+`, `<+`, `+>`, `-`, `<-`, `->`, `_`, `<_`, `_>`, `><`)
 /// and its target. The parser emits relations flat, in source order, tagged
 /// with raw indentation; assembling the parent/child tree is Layer B's job.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Relation {
     /// Count of leading whitespace chars before the operator.
@@ -113,6 +123,7 @@ pub struct Relation {
 }
 
 /// The kind of dialectical relation, with the `+`≡`<+` family collapsed.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelationOperator {
     Support,
@@ -125,6 +136,7 @@ pub enum RelationOperator {
 /// above). `Inbound` = the relation points from the target to the parent
 /// (`+`, `<+`, etc.). `Outbound` = from the parent to the target (`+>`, `->`,
 /// `_>`). `Bidirectional` = `><`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelationDirection {
     Inbound,
@@ -133,6 +145,7 @@ pub enum RelationDirection {
 }
 
 /// A relation's target: a statement or an argument, reusing those forms.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelationTarget {
     Statement(Statement),
@@ -142,6 +155,7 @@ pub enum RelationTarget {
 /// A premise-conclusion structure: a flat, source-order sequence of items.
 /// Role assignment (premise/conclusion), inference→conclusion binding, and
 /// relation association are Layer B's job.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pcs {
     pub items: Vec<PcsItem>,
@@ -150,6 +164,7 @@ pub struct Pcs {
 }
 
 /// One line of a PCS, tagged by form (not role).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PcsItem {
     /// `(n) <statement>` — content reuses the statement forms.
