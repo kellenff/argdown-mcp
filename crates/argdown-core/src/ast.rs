@@ -118,6 +118,8 @@ pub struct Relation {
     pub operator: RelationOperator,
     pub direction: RelationDirection,
     pub target: RelationTarget,
+    /// Optional `{yaml}` metadata between the operator and the target.
+    pub metadata: Option<Metadata>,
     /// Operator start → target end (excludes the indent).
     pub span: Span,
 }

@@ -280,13 +280,35 @@ fn reference_metadata(input: &mut Input<'_>) -> ModalResult<Option<Metadata>> {
     if !line[..open].trim().is_empty() {
         return Err(ErrMode::Cut(ContextError::new()));
     }
-    let m = capture_metadata(line, span.start, open)
+    consume_line_metadata(input, line, span.start, open)
+}
+
+/// Capture a metadata block that begins at the start of the remaining line
+/// content (after any leading trivia on that slice). Used by relation lines
+/// (`+ {weight: 0.9} <B>`). Returns `None` when the line does not open with
+/// metadata, leaving the input untouched.
+pub(crate) fn leading_line_metadata(input: &mut Input<'_>) -> ModalResult<Option<Metadata>> {
+    let (line, span) = peek(till_line_ending.with_span()).parse_next(input)?;
+    let open = match find_top_level_brace(line) {
+        Some(0) => 0,
+        _ => return Ok(None),
+    };
+    consume_line_metadata(input, line, span.start, open)
+}
+
+fn consume_line_metadata(
+    input: &mut Input<'_>,
+    line: &str,
+    line_start: usize,
+    open: usize,
+) -> ModalResult<Option<Metadata>> {
+    let m = capture_metadata(line, line_start, open)
         .map_err(|_| ErrMode::<ContextError>::Cut(ContextError::new()))?;
     // Consume the line up to and including the closing `}`.
     // `consumed` is a byte length; use `literal` to advance by that exact byte
     // slice rather than `take(n)` which would advance n *characters* and
     // over-consume when the metadata block contains multibyte UTF-8 chars.
-    let consumed = m.span.end - span.start;
+    let consumed = m.span.end - line_start;
     literal(&line[..consumed]).void().parse_next(input)?;
     inline_ws.parse_next(input)?;
     Ok(Some(m))

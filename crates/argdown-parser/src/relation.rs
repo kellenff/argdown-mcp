@@ -11,6 +11,7 @@ use winnow::token::take_while;
 use crate::Input;
 use crate::argument::argument;
 use crate::statement::statement;
+use crate::text::leading_line_metadata;
 
 /// Parse one relation line: leading indent, an operator (which fixes both
 /// operator and direction), then a target. The operator is backtrackable, so a
@@ -29,6 +30,7 @@ pub(crate) fn relation(input: &mut Input<'_>) -> ModalResult<Relation> {
     // and falls through to `statement` (`_word` is italic text, `_ target` is a
     // relation).
     take_while(1.., [' ', '\t']).void().parse_next(input)?;
+    let metadata = leading_line_metadata(input)?;
     let target = cut_err(relation_target).parse_next(input)?;
     let end = match &target {
         RelationTarget::Statement(s) => s.span.end,
@@ -39,6 +41,7 @@ pub(crate) fn relation(input: &mut Input<'_>) -> ModalResult<Relation> {
         operator,
         direction,
         target,
+        metadata,
         span: Span {
             start: op_span.start,
             end,
