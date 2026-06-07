@@ -97,6 +97,40 @@ fn dung_prints_partition_json_with_titles() {
 }
 
 #[test]
+fn inspect_af_prints_attacks() {
+    let (stdout, stderr, code) = run(&["inspect-af"], "<A>: a\n\n<B>: b\n  -> <A>");
+    assert_eq!(code, Some(0));
+    assert!(stderr.is_empty(), "stderr: {stderr}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    let attacks = v["attacks"].as_array().expect("attacks array");
+    assert_eq!(attacks.len(), 1);
+    assert_eq!(attacks[0]["attacker"], 1);
+    assert_eq!(attacks[0]["target"], 0);
+}
+
+#[test]
+fn extensions_grounded_prints_labellings() {
+    let (stdout, stderr, code) = run(
+        &["extensions", "--semantics", "grounded"],
+        "<A>: a\n\n<B>: b\n  -> <A>",
+    );
+    assert_eq!(code, Some(0));
+    assert!(stderr.is_empty(), "stderr: {stderr}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    assert_eq!(v["semantics"], "grounded");
+    let labellings = v["labellings"].as_array().expect("labellings array");
+    assert!(!labellings.is_empty());
+    let in_titles: Vec<String> = labellings[0]
+        .as_array()
+        .expect("first labelling")
+        .iter()
+        .filter(|e| e["label"] == "in")
+        .filter_map(|e| e["title"].as_str().map(String::from))
+        .collect();
+    assert_eq!(in_titles, vec!["B"]);
+}
+
+#[test]
 fn unknown_subcommand_exits_two() {
     let (_stdout, stderr, code) = run(&["bogus"], "");
     assert_eq!(code, Some(2));

@@ -4,14 +4,18 @@
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
-use argdown_tools::{Diagnostic, Format, ToolError, dung, model_export, summarize};
+use argdown_model::Semantics;
+use argdown_tools::{
+    accepts, extensions, inspect_af, AcceptanceMode, Diagnostic, Format, ToolError, dung,
+    model_export, summarize,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(
     name = "argdown",
     version,
-    about = "Argdown toolchain: parse / export / dung over stdin -> stdout"
+    about = "Argdown toolchain: parse / export / inspect-af / extensions / accepts over stdin -> stdout"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -30,12 +34,65 @@ enum Command {
     },
     /// Compute the grounded extension (IN/OUT/UNDEC) from stdin as JSON.
     Dung,
+    /// Project stdin to a Dung AF; print arguments, attacks, and metadata as JSON.
+    InspectAf,
+    /// Compute Dung extensions under the chosen semantics; print JSON.
+    Extensions {
+        /// Dung semantics (default: preferred).
+        #[arg(long, value_enum, default_value = "preferred")]
+        semantics: CliSemantics,
+    },
+    /// Point query: is an argument accepted under credulous or skeptical reasoning?
+    Accepts {
+        /// Arena id of the argument to query.
+        id: usize,
+        /// Dung semantics (default: preferred).
+        #[arg(long, value_enum, default_value = "preferred")]
+        semantics: CliSemantics,
+        /// Credulous or skeptical acceptance (default: credulous).
+        #[arg(long, value_enum, default_value = "credulous")]
+        mode: CliAcceptanceMode,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
 enum OutputFormat {
     Json,
     Yaml,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum CliSemantics {
+    Preferred,
+    Grounded,
+    Stable,
+    Complete,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum CliAcceptanceMode {
+    Credulous,
+    Skeptical,
+}
+
+impl From<CliSemantics> for Semantics {
+    fn from(s: CliSemantics) -> Self {
+        match s {
+            CliSemantics::Preferred => Semantics::Preferred,
+            CliSemantics::Grounded => Semantics::Grounded,
+            CliSemantics::Stable => Semantics::Stable,
+            CliSemantics::Complete => Semantics::Complete,
+        }
+    }
+}
+
+impl From<CliAcceptanceMode> for AcceptanceMode {
+    fn from(m: CliAcceptanceMode) -> Self {
+        match m {
+            CliAcceptanceMode::Credulous => AcceptanceMode::Credulous,
+            CliAcceptanceMode::Skeptical => AcceptanceMode::Skeptical,
+        }
+    }
 }
 
 impl From<OutputFormat> for Format {
@@ -92,6 +149,20 @@ fn run(cli: Cli) -> Result<String, String> {
             Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
             Err(d) => Err(format_diagnostic(&d)),
         },
+        Command::InspectAf => match inspect_af(&source) {
+            Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
+            Err(d) => Err(format_diagnostic(&d)),
+        },
+        Command::Extensions { semantics } => match extensions(&source, semantics.into()) {
+            Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
+            Err(d) => Err(format_diagnostic(&d)),
+        },
+        Command::Accepts { id, semantics, mode } => {
+            match accepts(&source, id, semantics.into(), mode.into()) {
+                Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
+                Err(d) => Err(format_diagnostic(&d)),
+            }
+        }
     }
 }
 
