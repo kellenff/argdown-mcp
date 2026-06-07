@@ -1,8 +1,8 @@
 //! Dung semantics dispatch: grounded, complete, preferred, stable.
 
-use super::propagate::{grounded_fixpoint, Label, Labeling};
-use super::search::search_complete_labelings;
 use super::ArgumentationFramework;
+use super::propagate::{Label, Labeling, grounded_fixpoint};
+use super::search::search_complete_labelings;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -84,9 +84,10 @@ fn filter_preferred(labellings: Vec<Labeling>) -> Vec<Labeling> {
         .enumerate()
         .filter(|(i, _)| {
             let set_i = &in_sets[*i];
-            !in_sets.iter().enumerate().any(|(j, set_j)| {
-                *i != j && set_i.is_subset(set_j) && set_i.len() < set_j.len()
-            })
+            !in_sets
+                .iter()
+                .enumerate()
+                .any(|(j, set_j)| *i != j && set_i.is_subset(set_j) && set_i.len() < set_j.len())
         })
         .map(|(_, l)| l)
         .collect()
@@ -108,8 +109,8 @@ fn is_stable(af: &ArgumentationFramework, labeling: &Labeling) -> bool {
     for &(from, to) in &af.attacks {
         attackers_of.entry(to).or_default().push(from);
     }
-    af.arguments.iter().all(|&arg| {
-        match labeling.get(&arg).copied().unwrap_or(Label::Undec) {
+    af.arguments.iter().all(
+        |&arg| match labeling.get(&arg).copied().unwrap_or(Label::Undec) {
             Label::Out => attackers_of
                 .get(&arg)
                 .map(|atts| {
@@ -118,8 +119,8 @@ fn is_stable(af: &ArgumentationFramework, labeling: &Labeling) -> bool {
                 })
                 .unwrap_or(false),
             _ => true,
-        }
-    })
+        },
+    )
 }
 
 fn search_algorithm(used_backtracking: bool) -> Algorithm {
@@ -168,7 +169,10 @@ mod tests {
         let af = af(3, &[(0, 1), (1, 2)]);
         let r = solve(&af, Semantics::Preferred);
         assert_eq!(r.algorithm, Algorithm::SccPropagationOnly);
-        assert_eq!(in_args(&r.labellings[0]), vec![ArgumentId(0), ArgumentId(2)]);
+        assert_eq!(
+            in_args(&r.labellings[0]),
+            vec![ArgumentId(0), ArgumentId(2)]
+        );
     }
 
     #[test]

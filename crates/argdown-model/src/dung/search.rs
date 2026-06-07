@@ -1,8 +1,8 @@
 //! SCC-decomposition + backtracking search for complete labellings.
 
-use super::propagate::{empty_labeling, grounded_fixpoint, propagate_once, Label, Labeling};
-use super::scc::analyze_af;
 use super::ArgumentationFramework;
+use super::propagate::{Label, Labeling, empty_labeling, grounded_fixpoint, propagate_once};
+use super::scc::analyze_af;
 use crate::ArgumentId;
 use std::collections::HashMap;
 
@@ -117,29 +117,34 @@ fn is_complete(af: &ArgumentationFramework, labeling: &Labeling) -> bool {
     })
 }
 
-fn is_partially_consistent(af: &ArgumentationFramework, arg: ArgumentId, labeling: &Labeling) -> bool {
+fn is_partially_consistent(
+    af: &ArgumentationFramework,
+    arg: ArgumentId,
+    labeling: &Labeling,
+) -> bool {
     let attackers_of = build_attackers(af);
     let lab = labeling.get(&arg).copied().unwrap_or(Label::Undec);
     let attackers = attackers_of.get(&arg).map(Vec::as_slice).unwrap_or(&[]);
     match lab {
-        Label::In => attackers
-            .iter()
-            .all(|a| {
+        Label::In => {
+            attackers.iter().all(|a| {
                 let al = labeling.get(a).copied().unwrap_or(Label::Undec);
                 al == Label::Out || al == Label::Undec
-            })
-            && !attackers
+            }) && !attackers
                 .iter()
-                .any(|a| labeling.get(a).copied() == Some(Label::In)),
+                .any(|a| labeling.get(a).copied() == Some(Label::In))
+        }
         Label::Out => attackers
             .iter()
             .any(|a| labeling.get(a).copied() == Some(Label::In)),
-        Label::Undec => !attackers
-            .iter()
-            .all(|a| labeling.get(a).copied().unwrap_or(Label::Undec) == Label::Out)
-            && !attackers
+        Label::Undec => {
+            !attackers
                 .iter()
-                .any(|a| labeling.get(a).copied() == Some(Label::In)),
+                .all(|a| labeling.get(a).copied().unwrap_or(Label::Undec) == Label::Out)
+                && !attackers
+                    .iter()
+                    .any(|a| labeling.get(a).copied() == Some(Label::In))
+        }
     }
 }
 
@@ -147,12 +152,9 @@ fn is_partially_consistent(af: &ArgumentationFramework, arg: ArgumentId, labelin
 fn can_be_defeated(af: &ArgumentationFramework, arg: ArgumentId, labeling: &Labeling) -> bool {
     let attackers_of = build_attackers(af);
     let attackers = attackers_of.get(&arg).map(Vec::as_slice).unwrap_or(&[]);
-    attackers.iter().any(|a| {
-        matches!(
-            labeling.get(a).copied().unwrap_or(Label::Undec),
-            Label::In
-        )
-    })
+    attackers
+        .iter()
+        .any(|a| matches!(labeling.get(a).copied().unwrap_or(Label::Undec), Label::In))
 }
 
 #[cfg(test)]
