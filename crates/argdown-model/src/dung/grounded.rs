@@ -1,7 +1,7 @@
 //! Grounded extension via shared fixpoint propagation.
 
+use super::propagate::{Label, grounded_fixpoint};
 use super::{ArgumentationFramework, GroundedLabelling};
-use super::propagate::{grounded_fixpoint, Label};
 
 /// Compute the unique grounded labelling of an AF via the characteristic-
 /// function least-fixpoint. Total.

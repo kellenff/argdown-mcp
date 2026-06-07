@@ -1,7 +1,7 @@
 //! Shared label propagation for Dung AF semantics.
 
-use crate::ArgumentId;
 use super::ArgumentationFramework;
+use crate::ArgumentId;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]

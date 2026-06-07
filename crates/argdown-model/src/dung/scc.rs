@@ -1,7 +1,7 @@
 //! Strongly connected component analysis for Dung AFs (Tarjan).
 
-use crate::ArgumentId;
 use super::ArgumentationFramework;
+use crate::ArgumentId;
 
 /// Metadata derived from structural analysis of an argumentation framework.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -18,10 +18,7 @@ pub struct AfMetadata {
 pub fn analyze_af(af: &ArgumentationFramework) -> AfMetadata {
     let argument_count = af.arguments.len();
     let attack_count = af.attacks.len();
-    let has_self_attacks = af
-        .attacks
-        .iter()
-        .any(|&(from, to)| from == to);
+    let has_self_attacks = af.attacks.iter().any(|&(from, to)| from == to);
 
     let strongly_connected_components = if argument_count == 0 {
         Vec::new()
@@ -177,7 +174,10 @@ mod tests {
         let meta = analyze_af(&af(2, &[(0, 1), (1, 0)]));
         assert!(!meta.is_acyclic);
         assert!(!meta.has_self_attacks);
-        assert_eq!(meta.strongly_connected_components, vec![vec![ArgumentId(1), ArgumentId(0)]]);
+        assert_eq!(
+            meta.strongly_connected_components,
+            vec![vec![ArgumentId(1), ArgumentId(0)]]
+        );
         assert!(meta.isolated_arguments.is_empty());
     }
 
