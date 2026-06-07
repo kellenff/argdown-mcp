@@ -263,6 +263,242 @@ pub fn extensions(source: &str, semantics: Semantics) -> Result<ExtensionsResult
     })
 }
 
+/// Credulous vs skeptical acceptance mode for point queries.
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AcceptanceMode {
+    Credulous,
+    Skeptical,
+}
+
+/// Structured witness explaining why an argument is or is not accepted.
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WitnessType {
+    AcceptedUncontroversial,
+    AttackedByAccepted,
+    UnsupportedCycle,
+    MultipleInterpretations,
+    SkepticallyRejected,
+    UndefinedArgument,
+}
+
+/// Evidence backing an [`AcceptsResult`].
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct WitnessPayload {
+    #[serde(rename = "type")]
+    pub witness_type: WitnessType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub labelling: Option<Vec<LabellingEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub critical_attackers: Option<Vec<ArgRef>>,
+}
+
+/// Point query: is `argument_id` accepted under `semantics` and `mode`?
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct AcceptsResult {
+    pub accepted: bool,
+    /// `"in"`, `"out"`, `"undec"`, or `"varies"`.
+    pub status: String,
+    pub unanimous: bool,
+    pub witness: WitnessPayload,
+}
+
+/// Parse `source`, solve `semantics` extensions, and test acceptance of
+/// `argument_id` under credulous or skeptical reasoning.
+pub fn accepts(
+    source: &str,
+    argument_id: usize,
+    semantics: Semantics,
+    mode: AcceptanceMode,
+) -> Result<AcceptsResult, Diagnostic> {
+    let doc = parse(source).map_err(|e| Diagnostic {
+        message: e.message,
+        offset: e.offset,
+    })?;
+    let model = build_model(&doc);
+    let af = dung_framework(&model);
+    let arg = ArgumentId(argument_id);
+
+    if !af.arguments.contains(&arg) {
+        return Ok(AcceptsResult {
+            accepted: false,
+            status: "out".to_string(),
+            unanimous: true,
+            witness: WitnessPayload {
+                witness_type: WitnessType::UndefinedArgument,
+                labelling: None,
+                critical_attackers: None,
+            },
+        });
+    }
+
+    let result = solve(&af, semantics);
+    let metadata = analyze_af(&af);
+    let labels: Vec<Label> = result
+        .labellings
+        .iter()
+        .map(|lab| lab.get(&arg).copied().unwrap_or(Label::Undec))
+        .collect();
+
+    let unanimous = labels.iter().all(|l| *l == labels[0]);
+    let credulous_in = labels.contains(&Label::In);
+    let skeptical_in = !labels.is_empty() && labels.iter().all(|l| *l == Label::In);
+    let accepted = match mode {
+        AcceptanceMode::Credulous => credulous_in,
+        AcceptanceMode::Skeptical => skeptical_in,
+    };
+
+    let status = if unanimous {
+        label_str(labels[0]).to_string()
+    } else if credulous_in && !skeptical_in {
+        "varies".to_string()
+    } else {
+        dominant_status(&labels)
+    };
+
+    let witness = build_witness(&af, &model, &result.labellings, arg, mode, &metadata);
+
+    Ok(AcceptsResult {
+        accepted,
+        status,
+        unanimous,
+        witness,
+    })
+}
+
+fn dominant_status(labels: &[Label]) -> String {
+    if labels.iter().all(|l| *l == Label::Out) {
+        "out".to_string()
+    } else if labels.iter().all(|l| *l == Label::Undec) {
+        "undec".to_string()
+    } else if labels.contains(&Label::In) {
+        "varies".to_string()
+    } else {
+        "undec".to_string()
+    }
+}
+
+fn build_witness(
+    af: &argdown_model::ArgumentationFramework,
+    model: &Model,
+    labellings: &[argdown_model::Labeling],
+    arg: ArgumentId,
+    mode: AcceptanceMode,
+    metadata: &AfMetadata,
+) -> WitnessPayload {
+    let witness_type = classify_witness(labellings, arg, mode, metadata);
+
+    let (labelling_idx, critical_attackers) = match witness_type {
+        WitnessType::UndefinedArgument => (None, None),
+        WitnessType::AcceptedUncontroversial => (
+            labellings.iter().position(|lab| lab.get(&arg) == Some(&Label::In)),
+            None,
+        ),
+        WitnessType::AttackedByAccepted => {
+            let idx = labellings.iter().position(|lab| {
+                lab.get(&arg) == Some(&Label::Out)
+                    && in_attackers(af, model, lab, arg).is_some()
+            });
+            let attackers = idx.and_then(|i| in_attackers(af, model, &labellings[i], arg));
+            (idx, attackers)
+        }
+        WitnessType::UnsupportedCycle => (
+            labellings
+                .iter()
+                .position(|lab| lab.get(&arg) == Some(&Label::Undec)),
+            None,
+        ),
+        WitnessType::MultipleInterpretations => (
+            labellings.iter().position(|lab| lab.get(&arg) == Some(&Label::In)),
+            None,
+        ),
+        WitnessType::SkepticallyRejected => (
+            labellings.iter().position(|lab| lab.get(&arg) == Some(&Label::In)),
+            None,
+        ),
+    };
+
+    let labelling = labelling_idx.map(|i| labeling_to_entries(af, model, &labellings[i]));
+
+    WitnessPayload {
+        witness_type,
+        labelling,
+        critical_attackers,
+    }
+}
+
+fn classify_witness(
+    labellings: &[argdown_model::Labeling],
+    arg: ArgumentId,
+    mode: AcceptanceMode,
+    metadata: &AfMetadata,
+) -> WitnessType {
+    let labels: Vec<Label> = labellings
+        .iter()
+        .map(|lab| lab.get(&arg).copied().unwrap_or(Label::Undec))
+        .collect();
+    let credulous_in = labels.contains(&Label::In);
+    let skeptical_in = !labels.is_empty() && labels.iter().all(|l| *l == Label::In);
+
+    if labels.iter().all(|l| *l == Label::In) {
+        return WitnessType::AcceptedUncontroversial;
+    }
+    if labels.iter().all(|l| *l == Label::Out) {
+        return WitnessType::AttackedByAccepted;
+    }
+    if labels.iter().all(|l| *l == Label::Undec) && in_cycle(arg, metadata) {
+        return WitnessType::UnsupportedCycle;
+    }
+    if credulous_in && !skeptical_in {
+        return match mode {
+            AcceptanceMode::Skeptical => WitnessType::MultipleInterpretations,
+            AcceptanceMode::Credulous => WitnessType::SkepticallyRejected,
+        };
+    }
+    if labels.contains(&Label::Out) {
+        return WitnessType::AttackedByAccepted;
+    }
+    if labels.contains(&Label::Undec) && in_cycle(arg, metadata) {
+        return WitnessType::UnsupportedCycle;
+    }
+    WitnessType::MultipleInterpretations
+}
+
+fn in_cycle(arg: ArgumentId, metadata: &AfMetadata) -> bool {
+    metadata
+        .strongly_connected_components
+        .iter()
+        .any(|scc| scc.len() > 1 && scc.contains(&arg))
+        || metadata.has_self_attacks && metadata.isolated_arguments.contains(&arg)
+}
+
+fn in_attackers(
+    af: &argdown_model::ArgumentationFramework,
+    model: &Model,
+    labeling: &argdown_model::Labeling,
+    target: ArgumentId,
+) -> Option<Vec<ArgRef>> {
+    let attackers: Vec<ArgRef> = af
+        .attacks
+        .iter()
+        .filter(|&&(from, to)| to == target && labeling.get(&from) == Some(&Label::In))
+        .map(|&(from, _)| ArgRef {
+            id: from.0,
+            title: title_for(model, from),
+        })
+        .collect();
+    if attackers.is_empty() {
+        None
+    } else {
+        Some(attackers)
+    }
+}
+
 fn title_for(model: &Model, id: ArgumentId) -> Option<String> {
     model.arguments.get(id.0).and_then(|a| a.title.clone())
 }
@@ -444,5 +680,88 @@ mod tests {
                 .collect::<Vec<_>>(),
             old.in_.iter().map(|a| a.id).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn accepts_unattacked_skeptical_is_accepted_uncontroversial() {
+        let r = accepts(
+            "<A>: a",
+            0,
+            Semantics::Preferred,
+            AcceptanceMode::Skeptical,
+        )
+        .unwrap();
+        assert!(r.accepted);
+        assert_eq!(r.status, "in");
+        assert!(r.unanimous);
+        assert_eq!(
+            r.witness.witness_type,
+            WitnessType::AcceptedUncontroversial
+        );
+    }
+
+    #[test]
+    fn accepts_attacked_credulous_is_attacked_by_accepted() {
+        // A (id 0) attacks B (id 1); B is OUT under preferred.
+        let r = accepts(
+            "<A>: a\n  -> <B>\n\n<B>: b",
+            1,
+            Semantics::Preferred,
+            AcceptanceMode::Credulous,
+        )
+        .unwrap();
+        assert!(!r.accepted);
+        assert_eq!(r.status, "out");
+        assert_eq!(r.witness.witness_type, WitnessType::AttackedByAccepted);
+        let attackers = r
+            .witness
+            .critical_attackers
+            .expect("critical_attackers present");
+        assert_eq!(attackers.len(), 1);
+        assert_eq!(attackers[0].id, 0);
+    }
+
+    #[test]
+    fn accepts_unknown_id_is_undefined_argument() {
+        let r = accepts(
+            "<A>: a",
+            99,
+            Semantics::Preferred,
+            AcceptanceMode::Credulous,
+        )
+        .unwrap();
+        assert!(!r.accepted);
+        assert_eq!(r.witness.witness_type, WitnessType::UndefinedArgument);
+    }
+
+    #[test]
+    fn accepts_two_cycle_skeptical_is_multiple_interpretations() {
+        let src = "<A>: a\n  -> <B>\n\n<B>: b\n  -> <A>";
+        let r = accepts(src, 0, Semantics::Preferred, AcceptanceMode::Skeptical).unwrap();
+        assert!(!r.accepted);
+        assert_eq!(r.status, "varies");
+        assert!(!r.unanimous);
+        assert_eq!(
+            r.witness.witness_type,
+            WitnessType::MultipleInterpretations
+        );
+    }
+
+    #[test]
+    fn accepts_two_cycle_credulous_is_skeptically_rejected() {
+        let src = "<A>: a\n  -> <B>\n\n<B>: b\n  -> <A>";
+        let r = accepts(src, 0, Semantics::Preferred, AcceptanceMode::Credulous).unwrap();
+        assert!(r.accepted);
+        assert_eq!(r.status, "varies");
+        assert_eq!(r.witness.witness_type, WitnessType::SkepticallyRejected);
+    }
+
+    #[test]
+    fn accepts_two_cycle_grounded_is_unsupported_cycle() {
+        let src = "<A>: a\n  -> <B>\n\n<B>: b\n  -> <A>";
+        let r = accepts(src, 0, Semantics::Grounded, AcceptanceMode::Skeptical).unwrap();
+        assert!(!r.accepted);
+        assert_eq!(r.status, "undec");
+        assert_eq!(r.witness.witness_type, WitnessType::UnsupportedCycle);
     }
 }
