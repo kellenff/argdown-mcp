@@ -222,7 +222,7 @@ test('ghAvailable returns false for a missing command without throwing', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `node --test plugins/argdown/bin/`
+Run: `node --test plugins/argdown/bin/*.test.mjs`
 Expected: FAIL — `launch.mjs` does not exist (import error / cannot find module).
 
 - [ ] **Step 3: Write the helpers**
@@ -294,7 +294,7 @@ export function ghAvailable(cmd = 'gh') {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `node --test plugins/argdown/bin/`
+Run: `node --test plugins/argdown/bin/*.test.mjs`
 Expected: PASS — all helper tests green (7 test cases).
 
 - [ ] **Step 5: Commit**
@@ -454,7 +454,7 @@ Note: the staging dir is created under the cache base (same filesystem as the fi
 
 - [ ] **Step 2: Confirm the unit tests still pass (helpers unchanged; import has no side effects)**
 
-Run: `node --test plugins/argdown/bin/`
+Run: `node --test plugins/argdown/bin/*.test.mjs`
 Expected: PASS — the same 7 helper tests. Importing `launch.mjs` must NOT trigger a download (the entry guard prevents it). If the test run hangs or hits the network, the entry guard is wrong — fix before proceeding.
 
 - [ ] **Step 3: Smoke-check the syntax and unsupported-platform path**
@@ -679,7 +679,7 @@ gh pr create --title "Package argdown-mcp as a Claude Code plugin + marketplace"
 The version bump triggers `release.yml` to cut a public `v0.1.1` release on merge — an irreversible outward-facing action — so per the project's standing convention this lands via a review gate.
 
 ## Test Plan
-- [ ] Launcher unit tests pass offline (`node --test plugins/argdown/bin/`).
+- [ ] Launcher unit tests pass offline (`node --test plugins/argdown/bin/*.test.mjs`).
 - [ ] `cargo test --workspace --locked`, `fmt --check`, `clippy -D warnings` clean.
 - [ ] `plugin-dev:plugin-validator` clean.
 - [ ] actionlint clean on `release.yml`.
