@@ -13,6 +13,7 @@ mod export;
 mod import;
 mod metadata;
 mod model;
+mod qbaf;
 mod sections;
 mod statements;
 mod tags;
@@ -29,6 +30,10 @@ pub use metadata::{MetadataError, Value, parse_metadata};
 pub use model::{
     Edge, Model, ModelArgument, ModelStatement, Node, PcsId, PcsIssue, RelationIssue, RelationKind,
     ResolvedPcs, ResolvedPcsItem, Role, build_model,
+};
+pub use qbaf::{
+    DEFAULT_BASE, QbafEdge, QbafEdgeKind, QbafFramework, QbafNode, base_degree, edge_weight,
+    parse_weight, project_qbaf,
 };
 pub use sections::{Section, SectionId, Sections, build_sections};
 pub use statements::{Statement, StatementConflict, StatementId, Statements, build_statements};
