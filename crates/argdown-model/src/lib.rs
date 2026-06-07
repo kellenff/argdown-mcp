@@ -8,6 +8,7 @@
 //! provides the tag registry.
 
 mod arguments;
+mod dung;
 mod metadata;
 mod model;
 mod sections;
@@ -15,6 +16,7 @@ mod statements;
 mod tags;
 
 pub use arguments::{Argument, ArgumentConflict, ArgumentId, Arguments, build_arguments};
+pub use dung::{ArgumentationFramework, GroundedLabelling, dung_framework, grounded_extension};
 pub use metadata::{MetadataError, Value, parse_metadata};
 pub use model::{
     Edge, Model, ModelArgument, ModelStatement, Node, PcsId, PcsIssue, RelationIssue, RelationKind,
