@@ -1,0 +1,62 @@
+name: fuzz
+
+# Coverage-guided fuzzing smoke-run (nightly + cargo-fuzz). This is NOT a
+# blocking deterministic gate like ci.yml — it builds each target and runs it
+# briefly to prevent bit-rot and surface regressions. The `fuzz/` crate is its
+# own workspace, so the stable ci.yml never compiles it.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * *" # daily
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [parse, model]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+          key: fuzz-${{ matrix.target }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      # Seed the (gitignored) managed corpus from the committed seeds; never run
+      # against fuzz/seeds directly — libFuzzer writes new finds into the corpus
+      # dir it is given. `TARGET` flows through env:, never interpolated into the
+      # shell, matching the project's CI discipline.
+      - name: Seed corpus
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p "fuzz/corpus/$TARGET"
+          cp fuzz/seeds/*.argdown "fuzz/corpus/$TARGET/"
+      - name: Fuzz (time-boxed smoke run)
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo +nightly fuzz run "$TARGET" -- -max_total_time=60
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts
+          if-no-files-found: ignore
