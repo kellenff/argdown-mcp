@@ -4,7 +4,7 @@ use crate::ArgumentId;
 use super::ArgumentationFramework;
 
 /// Metadata derived from structural analysis of an argumentation framework.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct AfMetadata {
     pub argument_count: usize,
     pub attack_count: usize,
