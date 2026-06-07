@@ -15,11 +15,21 @@ async fn lists_and_calls_the_three_tools() {
     // Client side: `()` implements `ClientHandler` (no-capability client).
     let client = ().serve(client_io).await.expect("client connects");
 
-    // list_all_tools → exactly our three.
+    // list_all_tools → our six tools.
     let tools = client.list_all_tools().await.expect("list tools");
     let mut names: Vec<String> = tools.iter().map(|t| t.name.to_string()).collect();
     names.sort();
-    assert_eq!(names, vec!["dung_extensions", "export_model", "parse"]);
+    assert_eq!(
+        names,
+        vec![
+            "accepts",
+            "dung_extensions",
+            "export_model",
+            "extensions",
+            "inspect_af",
+            "parse",
+        ]
+    );
 
     // parse → ok summary.
     let parsed = client
@@ -62,6 +72,27 @@ async fn lists_and_calls_the_three_tools() {
         .await
         .expect("dung_extensions call");
     assert_ne!(dunged.is_error, Some(true));
+
+    client.cancel().await.ok();
+}
+
+#[tokio::test]
+async fn list_tools_includes_extensions_and_inspect_af() {
+    let (client_io, server_io) = tokio::io::duplex(8192);
+
+    tokio::spawn(async move {
+        let server = ArgdownServer.serve(server_io).await.expect("server serves");
+        let _ = server.waiting().await;
+    });
+
+    let client = ().serve(client_io).await.expect("client connects");
+    let tools = client.list_all_tools().await.expect("list tools");
+    let names: Vec<String> = tools.iter().map(|t| t.name.to_string()).collect();
+
+    assert!(names.contains(&"extensions".to_string()));
+    assert!(names.contains(&"inspect_af".to_string()));
+    assert!(names.contains(&"accepts".to_string()));
+    assert!(names.contains(&"dung_extensions".to_string()));
 
     client.cancel().await.ok();
 }
