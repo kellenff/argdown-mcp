@@ -1,6 +1,6 @@
 # MCP Extensions Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use snowball:subagent-driven-development (recommended) or snowball:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use snowball:subagent-driven-development (recommended) or snowball:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Extend argdown-mcp with Dung semantics tools (`inspect_af`, `extensions`, `accepts`), YAML export, and a deprecated `dung_extensions` alias (v1.0); then ship QBAF DF-QuAD evaluation with dual weight resolution (v1.1).
 
@@ -46,7 +46,7 @@
 - Modify: `crates/argdown-model/src/lib.rs`
 - Modify: `crates/argdown-model/src/dung.rs` (temporary — re-export from submodule until Task 2)
 
-- [ ] **Step 1: Write failing SCC tests**
+- [x] **Step 1: Write failing SCC tests**
 
 Create `crates/argdown-model/src/dung/scc.rs` with tests only (module wired in step 3):
 
@@ -111,12 +111,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 Run: `cargo test -p argdown-model scc::tests -- --nocapture`
 Expected: FAIL (`todo!()` panics or module not found)
 
-- [ ] **Step 3: Implement Tarjan + metadata**
+- [x] **Step 3: Implement Tarjan + metadata**
 
 Wire `mod dung;` to `mod dung { mod scc; ... }` — move existing `ArgumentationFramework`, `dung_framework`, `GroundedLabelling`, `grounded_extension` from `dung.rs` into `dung/mod.rs` and `dung/af.rs` (or keep in `mod.rs` initially). Implement `analyze_af`:
 
@@ -172,12 +172,12 @@ pub use dung::{
 };
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 Run: `cargo test -p argdown-model dung -- --nocapture`
 Expected: all dung + scc tests PASS (relocate existing `dung.rs` tests unchanged)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/argdown-model/src/dung/ crates/argdown-model/src/lib.rs
@@ -193,7 +193,7 @@ git commit -m "feat(model): add SCC analysis for Dung AF metadata"
 - Create: `crates/argdown-model/src/dung/grounded.rs`
 - Modify: `crates/argdown-model/src/dung/mod.rs`
 
-- [ ] **Step 1: Write failing propagation tests**
+- [x] **Step 1: Write failing propagation tests**
 
 ```rust
 // propagate.rs
@@ -219,11 +219,11 @@ pub fn grounded_fixpoint(af: &ArgumentationFramework) -> Labeling {
 
 Tests: unattacked → IN; `a→b` → a IN b OUT; 2-cycle → both UNDEC; self-attack → UNDEC.
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 Run: `cargo test -p argdown-model propagate -- --nocapture`
 
-- [ ] **Step 3: Implement + wire `grounded_extension` to use it**
+- [x] **Step 3: Implement + wire `grounded_extension` to use it**
 
 ```rust
 // grounded.rs
@@ -235,12 +235,12 @@ pub fn grounded_extension(af: &ArgumentationFramework) -> GroundedLabelling {
 
 Replace the inline loop in old `grounded_extension` with this. Existing B6b tests must still pass.
 
-- [ ] **Step 4: Run full model tests**
+- [x] **Step 4: Run full model tests**
 
 Run: `cargo test -p argdown-model`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "refactor(model): extract shared propagation + grounded fixpoint"
@@ -255,7 +255,7 @@ git commit -m "refactor(model): extract shared propagation + grounded fixpoint"
 - Create: `crates/argdown-model/src/dung/semantics.rs`
 - Modify: `crates/argdown-model/src/dung/mod.rs`
 
-- [ ] **Step 1: Write failing semantics tests**
+- [x] **Step 1: Write failing semantics tests**
 
 ```rust
 // semantics.rs
@@ -310,9 +310,9 @@ fn stable_on_odd_cycle_is_empty() {
 }
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
-- [ ] **Step 3: Implement search + dispatch**
+- [x] **Step 3: Implement search + dispatch**
 
 `search.rs`:
 - Build attacker/target adjacency from `af.attacks`.
@@ -326,12 +326,12 @@ fn stable_on_odd_cycle_is_empty() {
 - `Semantics::Preferred` → filter to ⊆-maximal IN sets.
 - `Semantics::Stable` → filter to labellings with no UNDEC + reinstatement; empty vec if none.
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 Run: `cargo test -p argdown-model semantics search`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(model): SCC search + preferred/stable/complete semantics"
@@ -345,7 +345,7 @@ git commit -m "feat(model): SCC search + preferred/stable/complete semantics"
 - Modify: `crates/argdown-tools/src/lib.rs`
 - Modify: `crates/argdown-tools/Cargo.toml` (ensure `schemars` feature exports new types)
 
-- [ ] **Step 1: Write failing tool tests**
+- [x] **Step 1: Write failing tool tests**
 
 Add to `crates/argdown-tools/src/lib.rs`:
 
@@ -427,19 +427,19 @@ fn extensions_grounded_matches_dung() {
 }
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 Run: `cargo test -p argdown-tools inspect_af extensions`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Pipeline for both: `parse → build_model → dung_framework → …`
 
 Map `Label` → `"in"|"out"|"undec"`. Build `extension_sets` as IN-partition per labelling.
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(tools): add inspect_af and extensions pure functions"
@@ -452,7 +452,7 @@ git commit -m "feat(tools): add inspect_af and extensions pure functions"
 **Files:**
 - Modify: `crates/argdown-tools/src/lib.rs`
 
-- [ ] **Step 1: Write failing accepts tests**
+- [x] **Step 1: Write failing accepts tests**
 
 ```rust
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -497,15 +497,15 @@ Tests:
 - Unknown id → `undefined_argument`.
 - 2-cycle, query either → `unsupported_cycle` or `multiple_interpretations` depending on mode.
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Call `extensions(source, semantics)` internally (or `solve` directly). Derive per-extension status for `argument_id`. Apply credulous/skeptical rule. Build witness from first rejecting/supporting labelling.
 
-- [ ] **Step 4: Run — PASS**
+- [x] **Step 4: Run — PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(tools): add accepts with structured witnesses"
@@ -519,7 +519,7 @@ git commit -m "feat(tools): add accepts with structured witnesses"
 - Modify: `crates/argdown-mcp/src/server.rs`
 - Modify: `crates/argdown-mcp/tests/integration.rs`
 
-- [ ] **Step 1: Write failing integration test**
+- [x] **Step 1: Write failing integration test**
 
 Add to `crates/argdown-mcp/tests/integration.rs`:
 
@@ -535,11 +535,11 @@ async fn list_tools_includes_extensions_and_inspect_af() {
 }
 ```
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
 Run: `cargo test -p argdown-mcp list_tools_includes`
 
-- [ ] **Step 3: Register tools in server.rs**
+- [x] **Step 3: Register tools in server.rs**
 
 ```rust
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -584,12 +584,12 @@ Update `export_model` to accept `ExportModelInput` with format param.
 
 Update `ServerHandler` instructions string.
 
-- [ ] **Step 4: Run full MCP tests**
+- [x] **Step 4: Run full MCP tests**
 
 Run: `cargo test -p argdown-mcp`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(mcp): add inspect_af, extensions, accepts; deprecate dung_extensions"
@@ -603,7 +603,7 @@ git commit -m "feat(mcp): add inspect_af, extensions, accepts; deprecate dung_ex
 - Modify: `crates/argdown-cli/src/main.rs`
 - Modify: `crates/argdown-cli/tests/cli.rs`
 
-- [ ] **Step 1: Write failing CLI tests**
+- [x] **Step 1: Write failing CLI tests**
 
 ```rust
 #[test]
@@ -613,9 +613,9 @@ fn inspect_af_prints_attacks() {
 }
 ```
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
-- [ ] **Step 3: Add subcommands**
+- [x] **Step 3: Add subcommands**
 
 ```rust
 enum Command {
@@ -631,11 +631,11 @@ enum Command {
 
 Wire to `argdown_tools` functions; emit JSON on stdout.
 
-- [ ] **Step 4: Run CLI tests — PASS**
+- [x] **Step 4: Run CLI tests — PASS**
 
 Run: `cargo test -p argdown-cli`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(cli): add inspect-af, extensions, accepts subcommands"
@@ -649,7 +649,7 @@ git commit -m "feat(cli): add inspect-af, extensions, accepts subcommands"
 - Modify: `plugins/argdown/skills/argdown-analysis/SKILL.md`
 - Modify: `plugins/argdown/commands/analyze.md`
 
-- [ ] **Step 1: Update skill**
+- [x] **Step 1: Update skill**
 
 Document:
 - `inspect_af` — projected AF + SCC metadata
@@ -658,14 +658,14 @@ Document:
 - `export_model` — `format: yaml`
 - `dung_extensions` — deprecated, use `extensions` with `grounded`
 
-- [ ] **Step 2: Update analyze command routing**
+- [x] **Step 2: Update analyze command routing**
 
-- [ ] **Step 3: Verify workspace**
+- [x] **Step 3: Verify workspace**
 
 Run: `cargo build && cargo test && cargo fmt --check && cargo clippy --all-targets -- -D warnings`
 Expected: clean
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "docs(plugin): document MCP extension tools; mark dung_extensions deprecated"
@@ -682,7 +682,7 @@ git commit -m "docs(plugin): document MCP extension tools; mark dung_extensions 
 - Modify: `crates/argdown-model/src/export.rs` / `import.rs` (round-trip)
 - Test: `crates/argdown-model/src/model.rs` (existing test module)
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```rust
 #[test]
@@ -698,9 +698,9 @@ fn relation_metadata_is_preserved_on_edge() {
 
 (Adjust parser fixture to valid relation metadata syntax per A5a grammar.)
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
-- [ ] **Step 3: Add field + wire build**
+- [x] **Step 3: Add field + wire build**
 
 ```rust
 pub struct Edge {
@@ -714,9 +714,9 @@ pub struct Edge {
 
 Populate in `push_edge_if_new` from parser relation metadata (thread through B5 edge construction).
 
-- [ ] **Step 4: Run model + import/export tests — PASS**
+- [x] **Step 4: Run model + import/export tests — PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(model): preserve relation metadata on Edge for QBAF weights"
@@ -730,7 +730,7 @@ git commit -m "feat(model): preserve relation metadata on Edge for QBAF weights"
 - Create: `crates/argdown-model/src/qbaf.rs`
 - Modify: `crates/argdown-model/src/lib.rs`
 
-- [ ] **Step 1: Write failing QBAF projection tests**
+- [x] **Step 1: Write failing QBAF projection tests**
 
 ```rust
 pub struct QbafNode {
@@ -771,15 +771,15 @@ Tests:
 - Edge `{weight: 0.3}` overrides source base for that edge.
 - Undercut → attack edge in QBAF.
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
-- [ ] **Step 3: Implement projection**
+- [x] **Step 3: Implement projection**
 
 Map argument-level `Attack`, `Undercut` → `QbafEdgeKind::Attack`; `Support` → Support. Skip statement-level edges (same as Dung sharp scope for argument endpoints only — document in module docs).
 
-- [ ] **Step 4: Run — PASS**
+- [x] **Step 4: Run — PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(model): QBAF projection with dual weight resolution"
@@ -795,7 +795,7 @@ git commit -m "feat(model): QBAF projection with dual weight resolution"
 - Modify: `crates/argdown-mcp/src/server.rs`
 - Modify: `crates/argdown-cli/src/main.rs`
 
-- [ ] **Step 1: Write failing DF-QuAD tests**
+- [x] **Step 1: Write failing DF-QuAD tests**
 
 Use a 2-argument support/attack fixture with known degrees from hand calculation or literature example.
 
@@ -818,22 +818,22 @@ pub fn qbaf_evaluate(source: &str, threshold: f64) -> Result<Vec<QbafDegree>, Di
 }
 ```
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
-- [ ] **Step 3: Implement DF-QuAD iteration**
+- [x] **Step 3: Implement DF-QuAD iteration**
 
 Standard update rules: attacks decrease, supports increase, clamp [0,1], iterate to fixpoint or `max_iterations` (default 500, document in tool description). Classify: `final >= threshold` → accepted, `< threshold` → rejected; if oscillation detected → undec.
 
-- [ ] **Step 4: Wire MCP tool + CLI `qbaf` subcommand**
+- [x] **Step 4: Wire MCP tool + CLI `qbaf` subcommand**
 
 ```rust
 #[tool(name = "qbaf_evaluate", description = "Compute QBAF DF-QuAD degrees for arguments.")]
 fn qbaf_evaluate(&self, Parameters(input): Parameters<QbafInput>) -> Result<Json<Vec<QbafDegree>>, ErrorData> { ... }
 ```
 
-- [ ] **Step 5: Run full workspace tests — PASS**
+- [x] **Step 5: Run full workspace tests — PASS**
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git commit -m "feat: QBAF DF-QuAD evaluation (v1.1) — MCP, CLI, and solver"
@@ -846,11 +846,11 @@ git commit -m "feat: QBAF DF-QuAD evaluation (v1.1) — MCP, CLI, and solver"
 **Files:**
 - Modify: `plugins/argdown/skills/argdown-analysis/SKILL.md`
 
-- [ ] **Step 1: Document `qbaf_evaluate`**
+- [x] **Step 1: Document `qbaf_evaluate`**
 
 Include weight resolution rules (argument base, relation override, default 0.5).
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git commit -m "docs(plugin): document qbaf_evaluate tool"
@@ -889,7 +889,7 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
 
-Cross-check `extensions` grounded against `@argdown/core` `dung_extensions` on shared sample (project convention).
+Cross-check `extensions` grounded against `@argdown/core` `dung_extensions` on shared sample (project convention). **Done:** live reference MCP unavailable; B6b probe encoded in `reference_parity.rs` and MCP integration test — see `docs/snowball/decisions/2026-06-07T-reference-grounded-cross-check.md`.
 
 ---
 
