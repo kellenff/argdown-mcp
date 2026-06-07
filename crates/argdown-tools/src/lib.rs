@@ -6,7 +6,8 @@
 
 use argdown_core::Block;
 use argdown_model::{
-    ArgumentId, build_model, dung_framework, grounded_extension, to_json, to_yaml,
+    analyze_af, build_model, dung_framework, grounded_extension, solve, AfMetadata, Algorithm,
+    ArgumentId, Label, Model, Semantics, to_json, to_yaml,
 };
 use argdown_parser::parse;
 use serde::Serialize;
@@ -156,6 +157,193 @@ pub fn dung(source: &str) -> Result<DungResult, Diagnostic> {
     })
 }
 
+/// A projected AF argument with arena id and optional title.
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct AfArgumentRef {
+    pub id: usize,
+    pub title: Option<String>,
+}
+
+/// A directed attack edge in the projected AF (`attacker` → `target`).
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct AfAttackRef {
+    pub attacker: usize,
+    pub target: usize,
+}
+
+/// Projected Dung AF plus structural metadata from SCC analysis.
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct InspectAfResult {
+    pub arguments: Vec<AfArgumentRef>,
+    pub attacks: Vec<AfAttackRef>,
+    #[cfg_attr(feature = "schemars", schemars(with = "schema::AfMetadataSchema"))]
+    pub metadata: AfMetadata,
+}
+
+/// Parse `source`, project to a Dung AF, and return arguments, attacks, and
+/// structural metadata.
+pub fn inspect_af(source: &str) -> Result<InspectAfResult, Diagnostic> {
+    let doc = parse(source).map_err(|e| Diagnostic {
+        message: e.message,
+        offset: e.offset,
+    })?;
+    let model = build_model(&doc);
+    let af = dung_framework(&model);
+    let metadata = analyze_af(&af);
+    Ok(InspectAfResult {
+        arguments: af
+            .arguments
+            .iter()
+            .map(|&id| AfArgumentRef {
+                id: id.0,
+                title: title_for(&model, id),
+            })
+            .collect(),
+        attacks: af
+            .attacks
+            .iter()
+            .map(|&(from, to)| AfAttackRef {
+                attacker: from.0,
+                target: to.0,
+            })
+            .collect(),
+        metadata,
+    })
+}
+
+/// One argument's label in a reinstatement labelling.
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct LabellingEntry {
+    pub id: usize,
+    pub title: Option<String>,
+    /// `"in"`, `"out"`, or `"undec"`.
+    pub label: String,
+}
+
+/// All labellings (or the unique labelling) for a Dung semantics.
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct ExtensionsResult {
+    #[cfg_attr(feature = "schemars", schemars(with = "schema::SemanticsSchema"))]
+    pub semantics: Semantics,
+    #[cfg_attr(feature = "schemars", schemars(with = "schema::AlgorithmSchema"))]
+    pub algorithm: Algorithm,
+    pub labellings: Vec<Vec<LabellingEntry>>,
+    pub extension_sets: Vec<Vec<ArgRef>>,
+}
+
+/// Parse `source`, project to a Dung AF, and compute `semantics` extensions.
+pub fn extensions(source: &str, semantics: Semantics) -> Result<ExtensionsResult, Diagnostic> {
+    let doc = parse(source).map_err(|e| Diagnostic {
+        message: e.message,
+        offset: e.offset,
+    })?;
+    let model = build_model(&doc);
+    let af = dung_framework(&model);
+    let result = solve(&af, semantics);
+    let labellings = result
+        .labellings
+        .iter()
+        .map(|labeling| labeling_to_entries(&af, &model, labeling))
+        .collect();
+    let extension_sets = result
+        .labellings
+        .iter()
+        .map(|labeling| in_extension(&af, &model, labeling))
+        .collect();
+    Ok(ExtensionsResult {
+        semantics: result.semantics,
+        algorithm: result.algorithm,
+        labellings,
+        extension_sets,
+    })
+}
+
+fn title_for(model: &Model, id: ArgumentId) -> Option<String> {
+    model.arguments.get(id.0).and_then(|a| a.title.clone())
+}
+
+fn label_str(label: Label) -> &'static str {
+    match label {
+        Label::In => "in",
+        Label::Out => "out",
+        Label::Undec => "undec",
+    }
+}
+
+fn labeling_to_entries(
+    af: &argdown_model::ArgumentationFramework,
+    model: &Model,
+    labeling: &argdown_model::Labeling,
+) -> Vec<LabellingEntry> {
+    af.arguments
+        .iter()
+        .map(|&id| LabellingEntry {
+            id: id.0,
+            title: title_for(model, id),
+            label: label_str(labeling.get(&id).copied().unwrap_or(Label::Undec)).to_string(),
+        })
+        .collect()
+}
+
+fn in_extension(
+    af: &argdown_model::ArgumentationFramework,
+    model: &Model,
+    labeling: &argdown_model::Labeling,
+) -> Vec<ArgRef> {
+    af.arguments
+        .iter()
+        .filter(|&&id| labeling.get(&id).copied() == Some(Label::In))
+        .map(|&id| ArgRef {
+            id: id.0,
+            title: title_for(model, id),
+        })
+        .collect()
+}
+
+#[cfg(feature = "schemars")]
+mod schema {
+    use schemars::JsonSchema;
+
+    #[allow(dead_code)]
+    #[derive(JsonSchema)]
+    #[serde(remote = "argdown_model::AfMetadata")]
+    pub struct AfMetadataSchema {
+        argument_count: usize,
+        attack_count: usize,
+        is_acyclic: bool,
+        has_self_attacks: bool,
+        strongly_connected_components: Vec<Vec<usize>>,
+        isolated_arguments: Vec<usize>,
+    }
+
+    #[allow(dead_code)]
+    #[derive(JsonSchema)]
+    #[serde(remote = "argdown_model::Semantics")]
+    #[serde(rename_all = "snake_case")]
+    pub enum SemanticsSchema {
+        Grounded,
+        Preferred,
+        Stable,
+        Complete,
+    }
+
+    #[allow(dead_code)]
+    #[derive(JsonSchema)]
+    #[serde(remote = "argdown_model::Algorithm")]
+    #[serde(rename_all = "snake_case")]
+    pub enum AlgorithmSchema {
+        GroundedFixpoint,
+        SccPropagationOnly,
+        SccWithBacktracking,
+        FilteredComplete,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +424,25 @@ mod tests {
     fn dung_returns_parse_error_with_offset() {
         let d = dung("[A]: x { y").unwrap_err();
         assert!(d.offset <= "[A]: x { y".len());
+    }
+
+    #[test]
+    fn inspect_af_shows_attack_edge() {
+        let r = inspect_af("<A>: a\n\n<B>: b\n  -> <A>").unwrap();
+        assert_eq!(r.attacks.len(), 1);
+        assert_eq!(r.attacks[0].attacker, 1);
+    }
+
+    #[test]
+    fn extensions_grounded_matches_dung() {
+        let old = dung("<A>: a\n\n<B>: b\n  -> <A>").unwrap();
+        let new = extensions("<A>: a\n\n<B>: b\n  -> <A>", Semantics::Grounded).unwrap();
+        assert_eq!(
+            new.extension_sets[0]
+                .iter()
+                .map(|a| a.id)
+                .collect::<Vec<_>>(),
+            old.in_.iter().map(|a| a.id).collect::<Vec<_>>()
+        );
     }
 }
