@@ -1,22 +1,17 @@
-//! Argdown MCP server (placeholder binary).
-//!
-//! For now this just exercises the parser to prove the workspace wires up.
-//! The MCP protocol layer is future work.
+//! Argdown MCP server: serves `parse` / `export_model` / `dung_extensions`
+//! over stdio.
 
 mod server;
 mod tools;
 
-use argdown_core::Document;
-use argdown_parser::parse;
+use rmcp::ServiceExt;
+use rmcp::transport::io::stdio;
 
-fn main() {
-    let source = "";
-    match parse(source) {
-        Ok(document) => report(&document),
-        Err(error) => eprintln!("failed to parse: {error}"),
-    }
-}
+use server::ArgdownServer;
 
-fn report(document: &Document) {
-    println!("parsed argdown document: {document:?}");
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let service = ArgdownServer.serve(stdio()).await?;
+    service.waiting().await?;
+    Ok(())
 }
