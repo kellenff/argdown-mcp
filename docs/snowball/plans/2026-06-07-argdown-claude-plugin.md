@@ -583,7 +583,7 @@ Then add an attest step **after** the `Package archives + checksums` step and **
 
 ```yaml
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/*.tar.gz,dist/*.zip'
 ```
