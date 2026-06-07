@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Argdown MCP plugin launcher — pure helpers.
+// Argdown MCP plugin launcher.
 //
-// The download/verify/exec bootstrap is appended in a later step; this section
-// is side-effect-free and unit-tested.
+// Pure helpers (exported, unit-tested) followed by the side-effecting bootstrap
+// (download / verify / cache / exec). The bootstrap only runs when this file is
+// the process entry point — imports are side-effect-free.
 
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
@@ -75,6 +76,7 @@ export function ghAvailable(cmd = 'gh') {
 
 const SIGNER_WORKFLOW = 'kellenff/argdown-mcp/.github/workflows/release.yml';
 
+/** @returns {never} */
 function die(msg) {
   process.stderr.write(`argdown plugin launcher: ${msg}\n`);
   process.exit(1);
@@ -128,7 +130,7 @@ async function ensureBinary() {
         ['attestation', 'verify', archivePath, '--repo', REPO, '--signer-workflow', SIGNER_WORKFLOW],
         { stdio: ['ignore', 'ignore', 'inherit'] },
       );
-      if (r.status !== 0) die(`provenance attestation verification failed for ${name}`);
+      if (r.status !== 0) throw new Error(`provenance attestation verification failed for ${name}`);
     } else {
       process.stderr.write(
         'argdown plugin launcher: `gh` not found; proceeding on SHA-256 + TLS (provenance not cryptographically verified)\n',
@@ -141,10 +143,10 @@ async function ensureBinary() {
     const ex = spawnSync('tar', ['-xf', archivePath, '-C', extractDir], {
       stdio: ['ignore', 'ignore', 'inherit'],
     });
-    if (ex.status !== 0) die(`failed to extract ${name} (is \`tar\` available?)`);
+    if (ex.status !== 0) throw new Error(`failed to extract ${name} (is \`tar\` available?)`);
 
     const extractedBin = join(extractDir, exe);
-    if (!existsSync(extractedBin)) die(`archive ${name} did not contain ${exe}`);
+    if (!existsSync(extractedBin)) throw new Error(`archive ${name} did not contain ${exe}`);
     if (process.platform !== 'win32') chmodSync(extractedBin, 0o755);
 
     try {
@@ -168,10 +170,14 @@ function run(binPath) {
       /* already exited */
     }
   };
-  process.on('SIGINT', forward('SIGINT'));
-  process.on('SIGTERM', forward('SIGTERM'));
+  const sigintHandler = forward('SIGINT');
+  const sigtermHandler = forward('SIGTERM');
+  process.on('SIGINT', sigintHandler);
+  process.on('SIGTERM', sigtermHandler);
   child.on('error', (e) => die(`failed to exec argdown-mcp: ${e.message}`));
   child.on('exit', (code, signal) => {
+    process.off('SIGINT', sigintHandler);
+    process.off('SIGTERM', sigtermHandler);
     if (signal) process.kill(process.pid, signal);
     else process.exit(code ?? 0);
   });
