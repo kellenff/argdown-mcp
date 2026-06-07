@@ -80,3 +80,25 @@ fn export_malformed_writes_diagnostic_to_stderr_and_exits_one() {
     assert!(stdout.is_empty(), "stdout: {stdout}");
     assert!(stderr.starts_with("argdown:"), "stderr: {stderr}");
 }
+
+#[test]
+fn dung_prints_partition_json_with_titles() {
+    let (stdout, stderr, code) = run(&["dung"], "<A>: a\n\n<B>: b\n  -> <A>");
+    assert_eq!(code, Some(0));
+    assert!(stderr.is_empty(), "stderr: {stderr}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    let in_titles: Vec<String> = v["in"]
+        .as_array()
+        .expect("in array")
+        .iter()
+        .filter_map(|a| a["title"].as_str().map(String::from))
+        .collect();
+    assert_eq!(in_titles, vec!["B"]);
+}
+
+#[test]
+fn unknown_subcommand_exits_two() {
+    let (_stdout, stderr, code) = run(&["bogus"], "");
+    assert_eq!(code, Some(2));
+    assert!(!stderr.is_empty(), "clap should print a usage error");
+}

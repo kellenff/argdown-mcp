@@ -4,7 +4,7 @@
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
-use argdown_tools::{Format, ToolError, model_export, summarize};
+use argdown_tools::{Diagnostic, Format, ToolError, dung, model_export, summarize};
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
@@ -28,6 +28,8 @@ enum Command {
         #[arg(short, long, value_enum, default_value = "json")]
         format: OutputFormat,
     },
+    /// Compute the grounded extension (IN/OUT/UNDEC) from stdin as JSON.
+    Dung,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -60,6 +62,11 @@ fn main() -> ExitCode {
     }
 }
 
+/// Format a parse diagnostic with its byte offset for stderr.
+fn format_diagnostic(d: &Diagnostic) -> String {
+    format!("{} (at byte {})", d.message, d.offset)
+}
+
 /// Dispatch a subcommand to its pure `argdown_tools` function, returning the
 /// stdout payload on success or a human-readable diagnostic on failure.
 fn run(cli: Cli) -> Result<String, String> {
@@ -73,14 +80,18 @@ fn run(cli: Cli) -> Result<String, String> {
                     let d = result
                         .diagnostic
                         .expect("diagnostic present when summary absent");
-                    Err(format!("{} (at byte {})", d.message, d.offset))
+                    Err(format_diagnostic(&d))
                 }
             }
         }
         Command::Export { format } => model_export(&source, format.into()).map_err(|e| match e {
-            ToolError::Parse(d) => format!("{} (at byte {})", d.message, d.offset),
+            ToolError::Parse(d) => format_diagnostic(&d),
             ToolError::Serialize(msg) => msg,
         }),
+        Command::Dung => match dung(&source) {
+            Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
+            Err(d) => Err(format_diagnostic(&d)),
+        },
     }
 }
 
