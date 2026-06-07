@@ -1,0 +1,66 @@
+//! `argdown` CLI: reads Argdown from stdin, writes results to stdout.
+//! Diagnostics go to stderr; a non-zero exit code signals failure.
+
+use std::io::{self, Read, Write};
+use std::process::ExitCode;
+
+use argdown_tools::summarize;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(
+    name = "argdown",
+    version,
+    about = "Argdown toolchain: parse / export / dung over stdin -> stdout"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Parse Argdown from stdin; print a syntactic summary as JSON.
+    Parse,
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    match run(cli) {
+        Ok(out) => {
+            let mut stdout = io::stdout();
+            let _ = writeln!(stdout, "{out}");
+            ExitCode::SUCCESS
+        }
+        Err(msg) => {
+            eprintln!("argdown: {msg}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// Dispatch a subcommand to its pure `argdown_tools` function, returning the
+/// stdout payload on success or a human-readable diagnostic on failure.
+fn run(cli: Cli) -> Result<String, String> {
+    let source = read_stdin().map_err(|e| format!("failed to read stdin: {e}"))?;
+    match cli.command {
+        Command::Parse => {
+            let result = summarize(&source);
+            match result.summary {
+                Some(summary) => serde_json::to_string_pretty(&summary).map_err(|e| e.to_string()),
+                None => {
+                    let d = result
+                        .diagnostic
+                        .expect("diagnostic present when summary absent");
+                    Err(format!("{} (at byte {})", d.message, d.offset))
+                }
+            }
+        }
+    }
+}
+
+fn read_stdin() -> io::Result<String> {
+    let mut buf = String::new();
+    io::stdin().read_to_string(&mut buf)?;
+    Ok(buf)
+}
