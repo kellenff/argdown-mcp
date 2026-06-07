@@ -4,6 +4,7 @@
   <a href="https://github.com/kellenff/argdown-mcp/actions/workflows/ci.yml"><img src="https://github.com/kellenff/argdown-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/kellenff/argdown-mcp/actions/workflows/release.yml"><img src="https://github.com/kellenff/argdown-mcp/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <a href="https://github.com/kellenff/argdown-mcp/releases/latest"><img src="https://img.shields.io/github/v/release/kellenff/argdown-mcp" alt="GitHub release"></a>
+  <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License: MIT OR Apache-2.0"></a>
 </p>
 
 > Tell an agent which arguments survive, not which arguments it prefers.
@@ -329,7 +330,6 @@ This workspace is a Rust implementation of that missing semantics layer. The par
 | Done | Cross-compiled `argdown-mcp` release binaries with SHA-256 + optional provenance attestation |
 | Partial | `argdown` CLI is not yet bundled in GitHub release artifacts |
 | Partial | `dung_extensions` MCP alias is deprecated; use `extensions` with `semantics: "grounded"` |
-| Pending | `LICENSE` file in the repository root (license terms not yet published on GitHub) |
 
 ## Building and testing
 
@@ -348,4 +348,9 @@ CI runs fmt, clippy, build, and test on Linux, macOS (Intel and ARM), and Window
 
 ## License
 
-No `LICENSE` file is committed yet. Check the repository license field before adopting in production.
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.

@@ -2,6 +2,7 @@
 name = "argdown-tools"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [features]
 schemars = ["dep:schemars"]
