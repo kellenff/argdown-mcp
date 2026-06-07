@@ -6,8 +6,8 @@ use std::process::ExitCode;
 
 use argdown_model::Semantics;
 use argdown_tools::{
-    accepts, extensions, inspect_af, AcceptanceMode, Diagnostic, Format, ToolError, dung,
-    model_export, summarize,
+    AcceptanceMode, Diagnostic, Format, ToolError, accepts, dung, extensions, inspect_af,
+    model_export, qbaf_evaluate, summarize,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -15,7 +15,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[command(
     name = "argdown",
     version,
-    about = "Argdown toolchain: parse / export / inspect-af / extensions / accepts over stdin -> stdout"
+    about = "Argdown toolchain: parse / export / inspect-af / extensions / accepts / qbaf over stdin -> stdout"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -52,6 +52,12 @@ enum Command {
         /// Credulous or skeptical acceptance (default: credulous).
         #[arg(long, value_enum, default_value = "credulous")]
         mode: CliAcceptanceMode,
+    },
+    /// Compute QBAF DF-QuAD degrees and threshold-based status as JSON.
+    Qbaf {
+        /// Acceptance threshold (default: 0.5).
+        #[arg(long, default_value_t = 0.5)]
+        threshold: f64,
     },
 }
 
@@ -157,12 +163,18 @@ fn run(cli: Cli) -> Result<String, String> {
             Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
             Err(d) => Err(format_diagnostic(&d)),
         },
-        Command::Accepts { id, semantics, mode } => {
-            match accepts(&source, id, semantics.into(), mode.into()) {
-                Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
-                Err(d) => Err(format_diagnostic(&d)),
-            }
-        }
+        Command::Accepts {
+            id,
+            semantics,
+            mode,
+        } => match accepts(&source, id, semantics.into(), mode.into()) {
+            Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
+            Err(d) => Err(format_diagnostic(&d)),
+        },
+        Command::Qbaf { threshold } => match qbaf_evaluate(&source, threshold) {
+            Ok(result) => serde_json::to_string_pretty(&result).map_err(|e| e.to_string()),
+            Err(d) => Err(format_diagnostic(&d)),
+        },
     }
 }
 

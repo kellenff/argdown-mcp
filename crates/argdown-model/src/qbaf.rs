@@ -10,7 +10,14 @@
 //! - `edge_weight(edge)` ← `metadata.weight` on the relation, else the source
 //!   argument's base degree.
 
+use std::collections::HashMap;
+
 use crate::{ArgumentId, Model, Node, RelationKind, Value};
+
+/// Default iteration cap for DF-QuAD fixpoint search.
+pub const DEFAULT_MAX_ITERATIONS: usize = 500;
+
+const DEGREE_EPSILON: f64 = 1e-9;
 
 /// Default base degree when an argument carries no `weight` metadata.
 pub const DEFAULT_BASE: f64 = 0.5;
@@ -121,6 +128,117 @@ pub fn project_qbaf(model: &Model) -> Result<QbafFramework, String> {
     Ok(QbafFramework { nodes, edges })
 }
 
+fn clamp01(x: f64) -> f64 {
+    x.clamp(0.0, 1.0)
+}
+
+/// Classify a converged final degree against `threshold`.
+/// When `oscillated` is true (fixpoint not reached), returns `"undec"`.
+pub fn classify_degree(final_degree: f64, threshold: f64, oscillated: bool) -> &'static str {
+    if oscillated {
+        "undec"
+    } else if final_degree >= threshold {
+        "accepted"
+    } else {
+        "rejected"
+    }
+}
+
+/// Outcome of a DF-QuAD run, including whether a fixpoint was reached.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DfQuadResult {
+    pub degrees: HashMap<ArgumentId, f64>,
+    pub converged: bool,
+}
+
+fn df_quad_step(
+    qbaf: &QbafFramework,
+    degrees: &HashMap<ArgumentId, f64>,
+) -> Result<HashMap<ArgumentId, f64>, String> {
+    let mut next = degrees.clone();
+    for node in &qbaf.nodes {
+        let mut attack_sum = 0.0;
+        let mut support_sum = 0.0;
+        for edge in &qbaf.edges {
+            if edge.to != node.id {
+                continue;
+            }
+            let parent = degrees
+                .get(&edge.from)
+                .copied()
+                .ok_or_else(|| format!("edge source argument {:?} is missing", edge.from))?;
+            let contribution = parent * edge.weight;
+            match edge.kind {
+                QbafEdgeKind::Attack => attack_sum += contribution,
+                QbafEdgeKind::Support => support_sum += contribution,
+            }
+        }
+        let updated = clamp01(node.base_degree + support_sum - attack_sum);
+        next.insert(node.id, updated);
+    }
+    Ok(next)
+}
+
+fn degrees_converged(
+    qbaf: &QbafFramework,
+    old: &HashMap<ArgumentId, f64>,
+    new: &HashMap<ArgumentId, f64>,
+) -> bool {
+    qbaf.nodes.iter().all(|n| {
+        let prev = old.get(&n.id).copied().unwrap_or(0.0);
+        let curr = new.get(&n.id).copied().unwrap_or(0.0);
+        (prev - curr).abs() < DEGREE_EPSILON
+    })
+}
+
+/// DF-QuAD iterative update: supports increase, attacks decrease, clamp to \[0, 1\].
+pub fn df_quad_run(qbaf: &QbafFramework, max_iterations: usize) -> Result<DfQuadResult, String> {
+    if qbaf.nodes.is_empty() {
+        return Ok(DfQuadResult {
+            degrees: HashMap::new(),
+            converged: true,
+        });
+    }
+
+    let mut degrees: HashMap<ArgumentId, f64> = qbaf
+        .nodes
+        .iter()
+        .map(|n| (n.id, n.base_degree))
+        .collect();
+
+    for _ in 0..max_iterations {
+        let next = df_quad_step(qbaf, &degrees)?;
+        if degrees_converged(qbaf, &degrees, &next) {
+            return Ok(DfQuadResult {
+                degrees: next,
+                converged: true,
+            });
+        }
+        degrees = next;
+    }
+
+    Ok(DfQuadResult {
+        degrees,
+        converged: false,
+    })
+}
+
+/// DF-QuAD iterative update: supports increase, attacks decrease, clamp to \[0, 1\].
+/// Returns `Err` when the fixpoint is not reached within `max_iterations`.
+pub fn df_quad(
+    qbaf: &QbafFramework,
+    max_iterations: usize,
+) -> Result<HashMap<ArgumentId, f64>, String> {
+    let result = df_quad_run(qbaf, max_iterations)?;
+    if result.converged {
+        Ok(result.degrees)
+    } else {
+        Err(format!(
+            "DF-QuAD did not converge within {max_iterations} iterations"
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,5 +330,59 @@ mod tests {
         let qbaf = project_qbaf(&m).unwrap();
         assert_eq!(qbaf.edges.len(), 1);
         assert!((qbaf.edges[0].weight - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn df_quad_support_increases_degree() {
+        // B (0.4) supports A (0.6) with edge weight 0.2 → A = clamp(0.6 + 0.4*0.2) = 0.68.
+        let m = build_model(
+            &parse("<a>: A {weight: 0.6}\n  + {weight: 0.2} <b>\n\n<b>: B {weight: 0.4}").unwrap(),
+        );
+        let qbaf = project_qbaf(&m).unwrap();
+        let degrees = df_quad(&qbaf, DEFAULT_MAX_ITERATIONS).unwrap();
+        let a = arg_id(&m, "a");
+        assert!((degrees[&a] - 0.68).abs() < 1e-6);
+    }
+
+    #[test]
+    fn df_quad_attack_decreases_degree() {
+        // B (0.5) attacks A (0.8) with edge weight 0.5 → A = clamp(0.8 - 0.5*0.5) = 0.55.
+        let m = build_model(&parse("<a>: A {weight: 0.8}\n  - <b>\n\n<b>: B {weight: 0.5}").unwrap());
+        let qbaf = project_qbaf(&m).unwrap();
+        let degrees = df_quad(&qbaf, DEFAULT_MAX_ITERATIONS).unwrap();
+        let a = arg_id(&m, "a");
+        assert!((degrees[&a] - 0.55).abs() < 1e-6);
+    }
+
+    #[test]
+    fn df_quad_clamps_to_unit_interval() {
+        let m = build_model(
+            &parse("<a>: A {weight: 0.9}\n  + {weight: 1.0} <b>\n\n<b>: B {weight: 1.0}").unwrap(),
+        );
+        let qbaf = project_qbaf(&m).unwrap();
+        let degrees = df_quad(&qbaf, DEFAULT_MAX_ITERATIONS).unwrap();
+        let a = arg_id(&m, "a");
+        assert!((degrees[&a] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn classify_degree_respects_threshold_and_oscillation() {
+        assert_eq!(classify_degree(0.6, 0.5, false), "accepted");
+        assert_eq!(classify_degree(0.49, 0.5, false), "rejected");
+        assert_eq!(classify_degree(0.9, 0.5, true), "undec");
+    }
+
+    #[test]
+    fn df_quad_non_convergence_is_an_error() {
+        // Three-argument support chain needs >1 pass; cap at 1 iteration.
+        let m = build_model(
+            &parse(
+                "<a>: A {weight: 0.5}\n  + <b>\n\n<b>: B {weight: 0.5}\n  + <c>\n\n<c>: C {weight: 0.5}",
+            )
+            .unwrap(),
+        );
+        let qbaf = project_qbaf(&m).unwrap();
+        let err = df_quad(&qbaf, 1).unwrap_err();
+        assert!(err.contains("did not converge"));
     }
 }

@@ -8,8 +8,9 @@ use serde::Deserialize;
 use serde_json::json;
 
 use argdown_tools::{
-    accepts, extensions, inspect_af, model_export, AcceptanceMode, AcceptsResult, ArgRef,
-    DungResult, ExtensionsResult, Format, InspectAfResult, ParseResult, ToolError, summarize,
+    AcceptanceMode, AcceptsResult, ArgRef, DungResult, ExtensionsResult, Format, InspectAfResult,
+    ParseResult, QbafEvaluateResult, ToolError, accepts, extensions, inspect_af, model_export,
+    qbaf_evaluate, summarize,
 };
 
 /// Inline source input shared by every tool.
@@ -90,6 +91,19 @@ pub struct AcceptsInput {
 
 fn default_preferred() -> Semantics {
     Semantics::Preferred
+}
+
+fn default_threshold() -> f64 {
+    0.5
+}
+
+/// Source plus optional DF-QuAD acceptance threshold (default 0.5).
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct QbafInput {
+    /// The Argdown source text to analyze.
+    pub source: String,
+    #[serde(default = "default_threshold")]
+    pub threshold: f64,
 }
 
 fn invalid_source(d: argdown_tools::Diagnostic) -> ErrorData {
@@ -182,10 +196,7 @@ impl ArgdownServer {
     )]
     fn extensions(
         &self,
-        Parameters(ExtensionsInput {
-            source,
-            semantics,
-        }): Parameters<ExtensionsInput>,
+        Parameters(ExtensionsInput { source, semantics }): Parameters<ExtensionsInput>,
     ) -> Result<Json<ExtensionsResult>, ErrorData> {
         match extensions(&source, semantics) {
             Ok(result) => Ok(Json(result)),
@@ -225,9 +236,23 @@ impl ArgdownServer {
             Err(d) => Err(invalid_source(d)),
         }
     }
+
+    #[tool(
+        name = "qbaf_evaluate",
+        description = "Compute QBAF DF-QuAD degrees for arguments. Projects argument weights and support/attack edge weights, iterates to fixpoint (max 500 iterations), and classifies each argument as accepted/rejected/undec at the threshold (default 0.5). Prefer inline `source`."
+    )]
+    fn qbaf_evaluate(
+        &self,
+        Parameters(QbafInput { source, threshold }): Parameters<QbafInput>,
+    ) -> Result<Json<QbafEvaluateResult>, ErrorData> {
+        match qbaf_evaluate(&source, threshold) {
+            Ok(result) => Ok(Json(result)),
+            Err(d) => Err(invalid_source(d)),
+        }
+    }
 }
 
 #[tool_handler(
-    instructions = "Argdown argumentation toolchain. Tools: parse (syntactic summary/diagnostics), export_model (Layer B model as JSON or YAML), inspect_af (projected Dung AF), extensions (Dung labellings/extension sets; default semantics preferred), accepts (point query with witness), dung_extensions (DEPRECATED — use extensions with semantics=grounded). Prefer inline `source`."
+    instructions = "Argdown argumentation toolchain. Tools: parse (syntactic summary/diagnostics), export_model (Layer B model as JSON or YAML), inspect_af (projected Dung AF), extensions (Dung labellings/extension sets; default semantics preferred), accepts (point query with witness), qbaf_evaluate (QBAF DF-QuAD degrees), dung_extensions (DEPRECATED — use extensions with semantics=grounded). Prefer inline `source`."
 )]
 impl ServerHandler for ArgdownServer {}

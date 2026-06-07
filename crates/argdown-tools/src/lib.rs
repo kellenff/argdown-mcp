@@ -6,8 +6,9 @@
 
 use argdown_core::Block;
 use argdown_model::{
-    analyze_af, build_model, dung_framework, grounded_extension, solve, AfMetadata, Algorithm,
-    ArgumentId, Label, Model, Semantics, to_json, to_yaml,
+    AfMetadata, Algorithm, ArgumentId, DEFAULT_MAX_ITERATIONS, Label, Model, Semantics, analyze_af,
+    build_model, classify_degree, df_quad_run, dung_framework, grounded_extension, project_qbaf,
+    solve, to_json, to_yaml,
 };
 use argdown_parser::parse;
 use serde::Serialize;
@@ -97,6 +98,27 @@ pub enum ToolError {
     Parse(Diagnostic),
     /// The resolved model could not be serialized (e.g. non-string metadata key).
     Serialize(String),
+}
+
+/// One argument's DF-QuAD degree and threshold-based status.
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct QbafDegree {
+    pub id: usize,
+    pub title: Option<String>,
+    pub base: f64,
+    pub final_degree: f64,
+    /// `"accepted"`, `"rejected"`, or `"undec"` (non-convergence).
+    pub status: String,
+}
+
+/// DF-QuAD evaluation result (object root for MCP output schema).
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize)]
+pub struct QbafEvaluateResult {
+    pub semantics: String,
+    pub threshold: f64,
+    pub degrees: Vec<QbafDegree>,
 }
 
 /// Parse `source`, build the Layer B model, and serialize it in `format`.
@@ -371,6 +393,49 @@ pub fn accepts(
     })
 }
 
+/// Parse `source`, project to QBAF, run DF-QuAD, and classify degrees at `threshold`.
+pub fn qbaf_evaluate(source: &str, threshold: f64) -> Result<QbafEvaluateResult, Diagnostic> {
+    let doc = parse(source).map_err(|e| Diagnostic {
+        message: e.message,
+        offset: e.offset,
+    })?;
+    let model = build_model(&doc);
+    let qbaf = project_qbaf(&model).map_err(|msg| Diagnostic {
+        message: msg,
+        offset: 0,
+    })?;
+
+    let result = df_quad_run(&qbaf, DEFAULT_MAX_ITERATIONS).map_err(|msg| Diagnostic {
+        message: msg,
+        offset: 0,
+    })?;
+
+    let degrees = qbaf
+        .nodes
+        .iter()
+        .map(|node| {
+            let final_degree = result
+                .degrees
+                .get(&node.id)
+                .copied()
+                .unwrap_or(node.base_degree);
+            QbafDegree {
+                id: node.id.0,
+                title: title_for(&model, node.id),
+                base: node.base_degree,
+                final_degree,
+                status: classify_degree(final_degree, threshold, !result.converged).to_string(),
+            }
+        })
+        .collect();
+
+    Ok(QbafEvaluateResult {
+        semantics: "df_quad".to_string(),
+        threshold,
+        degrees,
+    })
+}
+
 fn dominant_status(labels: &[Label]) -> String {
     if labels.iter().all(|l| *l == Label::Out) {
         "out".to_string()
@@ -396,13 +461,14 @@ fn build_witness(
     let (labelling_idx, critical_attackers) = match witness_type {
         WitnessType::UndefinedArgument => (None, None),
         WitnessType::AcceptedUncontroversial => (
-            labellings.iter().position(|lab| lab.get(&arg) == Some(&Label::In)),
+            labellings
+                .iter()
+                .position(|lab| lab.get(&arg) == Some(&Label::In)),
             None,
         ),
         WitnessType::AttackedByAccepted => {
             let idx = labellings.iter().position(|lab| {
-                lab.get(&arg) == Some(&Label::Out)
-                    && in_attackers(af, model, lab, arg).is_some()
+                lab.get(&arg) == Some(&Label::Out) && in_attackers(af, model, lab, arg).is_some()
             });
             let attackers = idx.and_then(|i| in_attackers(af, model, &labellings[i], arg));
             (idx, attackers)
@@ -414,11 +480,15 @@ fn build_witness(
             None,
         ),
         WitnessType::MultipleInterpretations => (
-            labellings.iter().position(|lab| lab.get(&arg) == Some(&Label::In)),
+            labellings
+                .iter()
+                .position(|lab| lab.get(&arg) == Some(&Label::In)),
             None,
         ),
         WitnessType::SkepticallyRejected => (
-            labellings.iter().position(|lab| lab.get(&arg) == Some(&Label::In)),
+            labellings
+                .iter()
+                .position(|lab| lab.get(&arg) == Some(&Label::In)),
             None,
         ),
     };
@@ -684,20 +754,11 @@ mod tests {
 
     #[test]
     fn accepts_unattacked_skeptical_is_accepted_uncontroversial() {
-        let r = accepts(
-            "<A>: a",
-            0,
-            Semantics::Preferred,
-            AcceptanceMode::Skeptical,
-        )
-        .unwrap();
+        let r = accepts("<A>: a", 0, Semantics::Preferred, AcceptanceMode::Skeptical).unwrap();
         assert!(r.accepted);
         assert_eq!(r.status, "in");
         assert!(r.unanimous);
-        assert_eq!(
-            r.witness.witness_type,
-            WitnessType::AcceptedUncontroversial
-        );
+        assert_eq!(r.witness.witness_type, WitnessType::AcceptedUncontroversial);
     }
 
     #[test]
@@ -741,10 +802,7 @@ mod tests {
         assert!(!r.accepted);
         assert_eq!(r.status, "varies");
         assert!(!r.unanimous);
-        assert_eq!(
-            r.witness.witness_type,
-            WitnessType::MultipleInterpretations
-        );
+        assert_eq!(r.witness.witness_type, WitnessType::MultipleInterpretations);
     }
 
     #[test]
@@ -763,5 +821,38 @@ mod tests {
         assert!(!r.accepted);
         assert_eq!(r.status, "undec");
         assert_eq!(r.witness.witness_type, WitnessType::UnsupportedCycle);
+    }
+
+    #[test]
+    fn qbaf_evaluate_support_fixture_matches_hand_calculation() {
+        let src = "<a>: A {weight: 0.6}\n  + {weight: 0.2} <b>\n\n<b>: B {weight: 0.4}";
+        let result = qbaf_evaluate(src, 0.5).unwrap();
+        let a = result
+            .degrees
+            .iter()
+            .find(|d| d.title.as_deref() == Some("a"))
+            .unwrap();
+        assert!((a.final_degree - 0.68).abs() < 1e-6);
+        assert_eq!(a.status, "accepted");
+    }
+
+    #[test]
+    fn qbaf_evaluate_attack_fixture_rejects_below_threshold() {
+        let src = "<a>: A {weight: 0.8}\n  - <b>\n\n<b>: B {weight: 0.5}";
+        let result = qbaf_evaluate(src, 0.6).unwrap();
+        let a = result
+            .degrees
+            .iter()
+            .find(|d| d.title.as_deref() == Some("a"))
+            .unwrap();
+        assert!((a.final_degree - 0.55).abs() < 1e-6);
+        assert_eq!(a.status, "rejected");
+    }
+
+    #[test]
+    fn qbaf_evaluate_invalid_weight_is_a_diagnostic() {
+        let err = qbaf_evaluate("<a>: A {weight: bad}", 0.5).unwrap_err();
+        assert_eq!(err.offset, 0);
+        assert!(err.message.contains("weight"));
     }
 }
