@@ -13,9 +13,7 @@ use argdown_tools::{dung, extensions};
 const B6B_CANONICAL: &str = "<A>: a\n\n<B>: b\n  -> <A>";
 
 fn titles(refs: &[argdown_tools::ArgRef]) -> Vec<String> {
-    refs.iter()
-        .filter_map(|a| a.title.clone())
-        .collect()
+    refs.iter().filter_map(|a| a.title.clone()).collect()
 }
 
 #[test]
@@ -23,7 +21,11 @@ fn b6b_grounded_partition_is_b_in_a_out() {
     let d = dung(B6B_CANONICAL).expect("valid source");
     assert_eq!(titles(&d.in_), vec!["B"]);
     assert_eq!(titles(&d.out), vec!["A"]);
-    assert!(d.undec.is_empty(), "expected empty undec, got {:?}", d.undec);
+    assert!(
+        d.undec.is_empty(),
+        "expected empty undec, got {:?}",
+        d.undec
+    );
 }
 
 #[test]
