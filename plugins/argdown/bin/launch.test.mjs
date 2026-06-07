@@ -66,6 +66,12 @@ test('sha256 matches known vectors', () => {
   );
 });
 
+test('parseSha256Sums handles CRLF line endings', () => {
+  const hash = '1'.repeat(64);
+  const sums = `${hash}  file.tar.gz\r\n`;
+  assert.equal(parseSha256Sums(sums, 'file.tar.gz'), hash);
+});
+
 test('ghAvailable returns false for a missing command without throwing', () => {
   assert.equal(ghAvailable('definitely-not-a-real-binary-xyz-9999'), false);
 });
