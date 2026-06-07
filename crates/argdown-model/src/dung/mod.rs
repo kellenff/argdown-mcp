@@ -18,9 +18,14 @@
 
 mod grounded;
 mod propagate;
+mod search;
+mod semantics;
 mod scc;
 
 pub use grounded::grounded_extension;
+pub use propagate::{Label, Labeling};
+pub use search::search_complete_labelings;
+pub use semantics::{solve, Algorithm, Semantics, SemanticsResult};
 pub use scc::{AfMetadata, analyze_af};
 
 use crate::{ArgumentId, Model, Node, RelationKind};
