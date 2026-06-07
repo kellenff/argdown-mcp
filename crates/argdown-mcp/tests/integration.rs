@@ -28,6 +28,7 @@ async fn lists_and_calls_the_three_tools() {
             "extensions",
             "inspect_af",
             "parse",
+            "qbaf_evaluate",
         ]
     );
 
@@ -93,6 +94,7 @@ async fn list_tools_includes_extensions_and_inspect_af() {
     assert!(names.contains(&"inspect_af".to_string()));
     assert!(names.contains(&"accepts".to_string()));
     assert!(names.contains(&"dung_extensions".to_string()));
+    assert!(names.contains(&"qbaf_evaluate".to_string()));
 
     client.cancel().await.ok();
 }

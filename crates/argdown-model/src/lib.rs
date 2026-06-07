@@ -32,8 +32,9 @@ pub use model::{
     ResolvedPcs, ResolvedPcsItem, Role, build_model,
 };
 pub use qbaf::{
-    DEFAULT_BASE, QbafEdge, QbafEdgeKind, QbafFramework, QbafNode, base_degree, edge_weight,
-    parse_weight, project_qbaf,
+    DEFAULT_BASE, DEFAULT_MAX_ITERATIONS, DfQuadResult, QbafEdge, QbafEdgeKind, QbafFramework,
+    QbafNode, base_degree, classify_degree, df_quad, df_quad_run, edge_weight, parse_weight,
+    project_qbaf,
 };
 pub use sections::{Section, SectionId, Sections, build_sections};
 pub use statements::{Statement, StatementConflict, StatementId, Statements, build_statements};
