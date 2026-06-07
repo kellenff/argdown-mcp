@@ -1,6 +1,6 @@
 ---
 description: Analyze an Argdown document — validate it, show its structure, and compute the grounded extension (which arguments survive).
-argument-hint: <argdown text | path to a .argdown file>
+argument-hint: "[argdown text | path to a .argdown file]"
 ---
 
 Produce a dialectical analysis of an Argdown document using the `argdown` MCP tools.
