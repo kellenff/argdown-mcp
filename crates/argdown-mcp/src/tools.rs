@@ -1,6 +1,7 @@
 //! Pure tool logic: `&str` source → plain result data. No rmcp/protocol types.
 
 use argdown_core::Block;
+use argdown_model::{build_model, to_json};
 use argdown_parser::parse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,23 @@ pub fn summarize(source: &str) -> ParseResult {
     }
 }
 
+/// Why a tool could not produce its output.
+#[derive(Debug)]
+pub enum ToolError {
+    /// The source did not parse.
+    Parse(Diagnostic),
+    /// The resolved model could not be serialized (e.g. non-string metadata key).
+    Serialize(String),
+}
+
+/// Parse `source`, build the Layer B model, and return it as pretty-printed JSON.
+pub fn model_json(source: &str) -> Result<String, ToolError> {
+    let doc = parse(source)
+        .map_err(|e| ToolError::Parse(Diagnostic { message: e.message, offset: e.offset }))?;
+    let model = build_model(&doc);
+    to_json(&model).map_err(|e| ToolError::Serialize(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,5 +119,25 @@ mod tests {
         let d = r.diagnostic.expect("diagnostic present on failure");
         assert!(d.offset <= "# H {unterminated".len());
         assert!(!d.message.is_empty());
+    }
+
+    #[test]
+    fn model_json_serializes_the_resolved_model() {
+        let json = model_json("<A>: d\n\n(1) P1\n----\n(2) C1").expect("valid model");
+        let v: serde_json::Value = serde_json::from_str(&json).expect("reparses");
+        let obj = v.as_object().expect("top-level object");
+        for key in ["statements", "arguments", "pcs", "edges"] {
+            assert!(obj.contains_key(key), "missing key {key}");
+        }
+        assert_eq!(v["pcs"][0]["items"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn model_json_returns_parse_error_with_offset() {
+        let err = model_json("[A]: x { y").unwrap_err();
+        match err {
+            ToolError::Parse(d) => assert!(d.offset <= "[A]: x { y".len()),
+            other => panic!("expected ToolError::Parse, got {other:?}"),
+        }
     }
 }
