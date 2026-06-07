@@ -40,7 +40,7 @@ export function sumsUrl(version) {
 // `sha256sum -- *` emits "<64-hex>  <name>" (text mode, two spaces). The optional
 // "*" binary-mode marker before the name is tolerated defensively.
 export function parseSha256Sums(text, name) {
-  for (const line of text.split('\n')) {
+  for (const line of text.split(/\r?\n/)) {
     const m = line.match(/^([0-9a-f]{64})\s+\*?(.+)$/);
     if (m && m[2].trim() === name) return m[1];
   }
